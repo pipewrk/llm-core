@@ -11,5 +11,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/jasonnathan/news-rss.git"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.8",
+    "cheerio": "^1.0.0",
+    "xpath": "^0.0.34"
   }
 }
