@@ -1,61 +1,172 @@
-import * as cheerio from "cheerio";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import { visit } from "unist-util-visit";
+import { getEnv } from "./core";
+import ignored from "../ignore.json";
+import sites from "../sites.json";
 
-const AP_NEWS_URL = "https://apnews.com/";
-const LOCAL_FILE = "apnews.html"; // Local storage for debugging
+export type NewsExtractionResponse = {
+  title: string;
+  link: string;
+  description?: string | null;
+  image?: {
+    url: string;
+    caption?: string | null;
+  };
+};
 
-// 🔹 Fetch and save HTML (disabled by default)
-async function fetchSite(url: string, filename: string) {
-    console.log(`Fetching from ${url}...`);
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+export type Source = keyof typeof sites;
 
-    const html = await response.text();
-    await Bun.write(filename, html); // Save locally
-    return html;
+export type FetchMarkdownArgs = {
+  url: string;
+  selector: string;
+  apiKey: string;
+};
+
+export type SaveMarkdownArgs = {
+  filename: string;
+  content: string;
+};
+
+export type ExtractNewsArgs = {
+  markdown: string;
+  ignoreList: string[];
+};
+
+export type ProcessNewsArgs = {
+  url: string;
+  filename: string;
+  selector: string;
+};
+
+export type ExtractNewsFromFileArgs = {
+  filename: string;
+  ignoreList: string[];
+};
+/**
+ * Fetches and returns markdown content from a given URL.
+ */
+export async function fetchMarkdownContent({
+  url,
+  selector,
+}: FetchMarkdownArgs): Promise<string> {
+  const response = await fetch(`https://r.jina.ai/${url}`, {
+    headers: {
+      Authorization: `Bearer ${getEnv("JINA_API_KEY")}`,
+      "x-target-selector": selector,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! Status: ${response.status}`);
+  }
+
+  return response.text();
 }
 
-// 🔹 Read HTML from a local file
-async function readHtml(filename: string): Promise<string> {
-    console.log(`Reading from local file: ${filename}`);
-    return await Bun.file(filename).text();
+/**
+ * Saves markdown content to a file.
+ */
+export async function saveMarkdownToFile({
+  filename,
+  content,
+}: SaveMarkdownArgs): Promise<void> {
+  await Bun.write(`${filename}.md`, content);
 }
 
-// 🔹 Extract articles using Cheerio
-async function scrapeAPNews() {
-    try {
-        // 🔥 Toggle between fetching or reading local file
-        // const html = await fetchSite(AP_NEWS_URL, LOCAL_FILE); // Uncomment to fetch live data
-        const html = await readHtml(LOCAL_FILE); // Use local file
+/**
+ * Determines whether a title should be ignored based on an ignore list.
+ */
+export function shouldIgnoreTitle(title: string, ignoreList: string[]): boolean {
+  return ignoreList.some((filter) => title.includes(filter));
+}
 
-        // Load HTML into Cheerio
-        const $ = cheerio.load(html);
+/**
+ * Extracts unique links from markdown content.
+ */
+export function extractUniqueLinks(markdown: string): Set<string> {
+  const tree = unified().use(remarkParse).parse(markdown);
+  const links = new Set<string>();
 
-        // 🔥 Select all articles using CSS selectors
-        const articles = $(".PageList-items-item");
-
-        if (articles.length === 0) {
-            console.error("Error: No articles found.");
-            return;
-        }
-
-        const results: Array<{ headline: string; link: string; imageUrl: string; description: string }> = [];
-
-        articles.each((_, el) => {
-            const article = $(el);
-
-            const headline = article.find(".PagePromoContentIcons-text").text().trim() || "No headline";
-            const link = article.find("a.Link").attr("href") || "No link";
-            const imageUrl = article.find("img").attr("src") || "No image";
-            const description = article.find(".PagePromo-description span").text().trim() || "No description";
-
-            results.push({ headline, link, imageUrl, description });
-        });
-
-        console.log("Extracted Articles:", results);
-    } catch (error) {
-        console.error("Error processing AP News:", error instanceof Error ? error.message : error);
+  visit(tree, "link", (node) => {
+    if (typeof node.url === "string" && node.url.startsWith("http")) {
+      links.add(node.url);
     }
+  });
+
+  return links;
 }
 
-// Run the scraper
-scrapeAPNews();
+/**
+ * Parses markdown and extracts structured news articles.
+ */
+export function extractNewsArticles({
+  markdown,
+  ignoreList,
+}: ExtractNewsArgs): NewsExtractionResponse[] {
+  const tree = unified().use(remarkParse).parse(markdown);
+  const articles = new Map<string, NewsExtractionResponse>();
+  let lastImage: NewsExtractionResponse["image"] | null = null;
+
+  visit(tree, "link", (node) => {
+    const url = node.url;
+    if (!url.startsWith("http")) return;
+
+    const title = node.children
+      .filter((child) => child.type === "text")
+      .map((child) => child.value)
+      .join("")
+      .trim();
+
+    // Handle inline images
+    if (node.children.length > 0 && node.children[0].type === "image") {
+      const imageNode = node.children[0];
+      let caption = imageNode.alt?.trim();
+      if (caption) {
+        caption = caption.replace(/^Image \d+:\s*/, "");
+      }
+      lastImage = { url: imageNode.url, caption };
+      return;
+    }
+
+    // Assign title or fallback to last image caption
+    const finalTitle = title || lastImage?.caption;
+    if (!finalTitle) return;
+    if (shouldIgnoreTitle(finalTitle.trim(), ignoreList)) return;
+
+    if (!articles.has(url)) {
+      articles.set(url, { title: finalTitle, link: url });
+    }
+
+    // Attach image if available
+    if (lastImage) {
+      if (lastImage.caption === finalTitle) {
+        lastImage.caption = null;
+      }
+      articles.get(url)!.image = lastImage;
+      lastImage = null;
+    }
+  });
+
+  return Array.from(articles.values());
+}
+
+
+
+async function validateExtraction(label: string, source: Source) {
+  const config = sites[source];
+  if (!config) {
+    throw new Error(`Site not found: ${source}`);
+  }
+  const {urls} = config;
+  const cat = urls.find((url) => url.label === label);
+  if (!cat) {
+    throw new Error(`Category not found: ${label}`);
+  }
+  const markdown = await Bun.file(`${filename}.md`).text();
+
+  const structuredNews = extractNewsArticles({ markdown, ignoreList: ignored);
+  const uniqueLinks = extractUniqueLinks(markdown);
+
+  console.log(JSON.stringify(structuredNews, null, 2));
+}
