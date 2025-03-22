@@ -1,8 +1,6 @@
 import { LLMService } from "./llm-service.ts";
-import { withLogger } from "./decorators.ts";
 import { getEnv } from "./env.ts";
 
-@withLogger
 export class OllamaService extends LLMService {
   private endpoint: string;
   private model: string;
