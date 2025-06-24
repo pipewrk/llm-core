@@ -2,6 +2,7 @@
 
 .tmp/
 data/
+src/*.json
 # Logs
 
 logs

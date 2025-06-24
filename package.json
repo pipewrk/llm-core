@@ -1,14 +1,32 @@
 {
-  "name": "news-rss",
-  "module": "index.ts",
+  "name": "@jasonnathan/llm-core",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "scripts": {
-    "exp": "ts-node ./src/test.ts "
+    "exp": "ts-node ./src/test.ts ",
+    "build": "bun build src/core/index.ts --target node --outdir dist --format esm --sourcemap && tsc -p tsconfig.build.json",
+    "release": "standard-version",
+    "release:patch": "standard-version --release-as patch",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major"    
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/cli-progress": "^3.11.6",
     "@types/html-to-text": "^9.0.4",
+    "standard-version": "^9.5.0",
     "ts-node": "^10.9.2"
   },
   "peerDependencies": {
@@ -16,7 +34,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jasonnathan/news-rss.git"
+    "url": "https://github.com/jasonnathan/llm-core.git"
   },
   "dependencies": {
     "@huggingface/agents": "^0.0.5",

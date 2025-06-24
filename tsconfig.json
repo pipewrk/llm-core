@@ -9,7 +9,7 @@
     "allowJs": true,
 
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,    
+    "emitDecoratorMetadata": true,
 
     // Bundler mode
     "moduleResolution": "bundler",
@@ -25,6 +25,12 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
-  }
+    "noPropertyAccessFromIndexSignature": false,
+    "baseUrl": ".", // important
+    "paths": {
+      "ai-zero-shot-classifier": ["src/types/ai-zero-shot-classifier.d.ts"]
+    },
+    "typeRoots": ["./src/types", "./node_modules/@types"]
+  },
+  "include": ["src/core/*"]
 }

@@ -1,0 +1,11 @@
+// tsconfig.build.json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,                  // override
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "dist",
+  },
+  "include": ["src/core/**/*"]
+}
