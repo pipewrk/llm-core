@@ -22,6 +22,9 @@
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major"    
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/cli-progress": "^3.11.6",

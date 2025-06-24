@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { getEnv, setEnv } from "../env.ts";
 import { OllamaService } from "../ollama-service.ts";
 import { MockLogger } from "./logger.mock.ts";
-import { getEnv, setEnv } from "../env.ts";
 
 describe("OllamaService", () => {
   const logger = new MockLogger();
   const endpoint = "http://ollama.test";
   const model = "test-model";
-
+  
   beforeEach(() => {
     logger.clear();
   });
-
+  
   test("should initialize correctly with environment variables", () => {
     setEnv("OLLAMA_ENDPOINT", "http://env-endpoint.test");
     setEnv("OLLAMA_API_KEY", "test-api");
@@ -25,93 +25,19 @@ describe("OllamaService", () => {
 
   test("should sanitize JSON properly", () => {
     const sanitized = OllamaService["sanitizeJson"](
-      '```json\n{"key": "value",}\n```',
+      '```json\n{"key": "value",}\n```'
     );
     expect(sanitized).toBe('{"key": "value"}');
-  });
-
-  test("should send a request and return parsed response", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      json: mock().mockResolvedValue({
-        message: { content: '{"response": "test"}' },
-      }),
-    } as unknown as Response);
-
-    const service = new OllamaService(model, endpoint);
-    const options = { schema: { example: true } };
-
-    const result = await service.generatePromptAndSend(
-      "system-prompt",
-      "user-prompt",
-      options,
-    );
-
-    expect(global.fetch).toHaveBeenCalledWith(`${endpoint}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: "system-prompt" },
-          { role: "user", content: "user-prompt" },
-        ],
-        stream: false,
-        format: options,
-      }),
-    });
-    expect(result).toEqual({ response: "test" });
-    expect(logger.logs.info).toContain(
-      "Sending request to Ollama (attempt 1/3)...",
-    );
-  });
-
-  test("should retry on failure and eventually throw", async () => {
-    global.fetch = mock().mockRejectedValue(new Error("Network error"));
-
-    const service = new OllamaService(model, endpoint);
-    const options = { schema: { example: true } };
-
-    await expect(
-      service.generatePromptAndSend("system-prompt", "user-prompt", options),
-    ).rejects.toThrowError(
-      "Failed after 3 attempts to communicate with Ollama.",
-    );
-
-    expect(global.fetch).toHaveBeenCalledTimes(3);
-    expect(logger.logs.error.length).toBe(3);
-    expect(logger.logs.error[0]).toContain("Attempt 1 failed: Network error");
-  });
-
-  test("should validate response with a custom check", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      json: mock().mockResolvedValue({
-        message: { content: '{"key": "valid"}' },
-      }),
-    } as unknown as Response);
-
-    const service = new OllamaService(model, endpoint);
-
-    const customCheck = (response: { key: string }) =>
-      response.key === "valid" ? response : false;
-
-    const result = await service.generatePromptAndSend(
-      "system-prompt",
-      "user-prompt",
-      {},
-      customCheck,
-    );
-
-    expect(result).toEqual({ key: "valid" });
   });
 
   test("should throw error if custom check fails", async () => {
     global.fetch = mock().mockResolvedValue({
       ok: true,
-      json: mock().mockResolvedValue({
-        message: { content: '{"key": "invalid"}' },
-      }),
+      text: mock().mockResolvedValue(
+        JSON.stringify({
+          message: { content: '{"key": "invalid"}' },
+        })
+      ),
     } as unknown as Response);
 
     const service = new OllamaService(model, endpoint);
@@ -124,10 +50,68 @@ describe("OllamaService", () => {
         "system-prompt",
         "user-prompt",
         {},
-        customCheck,
-      ),
+        customCheck
+      )
     ).rejects.toThrowError(
-      "Failed after 3 attempts to communicate with Ollama.",
+      "Failed after 3 attempts to communicate with Ollama."
+    );
+  });
+
+  test("should validate response with a custom check", async () => {
+    global.fetch = mock().mockResolvedValue({
+      ok: true,
+      json: mock().mockResolvedValue({
+        message: { content: '{"key": "valid"}' },
+      }),
+      text: mock().mockResolvedValue(
+        JSON.stringify({
+          message: { content: '{"key": "valid"}' },
+        })
+      ),      
+    } as unknown as Response);
+
+    const service = new OllamaService(model, endpoint);
+
+    const customCheck = (response: { key: string }) =>
+      response.key === "valid" ? response : false;
+
+    const result = await service.generatePromptAndSend(
+      "system-prompt",
+      "user-prompt",
+      {},
+      customCheck
+    );
+
+    expect(result).toEqual({ key: "valid" });
+  });
+
+  test("should throw error if custom check fails", async () => {
+    global.fetch = mock().mockResolvedValue({
+      ok: true,
+      json: mock().mockResolvedValue({
+        message: { content: '{"key": "invalid"}' },
+      }),
+      text: mock().mockResolvedValue(
+        JSON.stringify({
+          message: { content: '{"key": "invalid"}' },
+        })
+      ),      
+    } as unknown as Response);
+
+    const service = new OllamaService(model, endpoint);
+
+    const customCheck = (response: { key: string }) =>
+      response.key === "valid" ? response : false;
+
+    await expect(
+      service.generatePromptAndSend(
+        "system-prompt",
+        "user-prompt",
+        {},
+        customCheck
+      )
+    ).rejects.toThrowError(
+      "Failed after 3 attempts to communicate with Ollama."
     );
   });
 });

@@ -16,7 +16,7 @@ export class OllamaService extends LLMService {
   constructor(
     model: string,
     endpoint = getEnv("OLLAMA_ENDPOINT"),
-    apiKey = "",
+    apiKey = getEnv("OLLAMA_API_KEY"),
   ) {
     super();
     this.endpoint = endpoint;

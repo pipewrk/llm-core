@@ -3,11 +3,13 @@ import type { ILogger } from "../../types/dataset"; // Adjust the import path if
 import { pipeline, type PipelineStep } from "../pipeline";
 import { MockLogger } from "./logger.mock";
 import { appendStep, uppercaseStep } from "./steps.mock";
+import { setEnv } from "../env";
 
 describe("Generic Pipeline Tests", () => {
   const logger = new MockLogger();
   beforeEach(() => {
     logger.clear();
+    setEnv("LOG_PATH", "./")
   });
 
   it("should execute a single pipeline step correctly", async () => {

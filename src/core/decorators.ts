@@ -2,8 +2,8 @@ import { getEnv } from "./env.ts";
 import { Logger } from "./logger.ts";
 
 const loggerSingleton = new Logger(
-  `${getEnv("LOG_PATH")}/app.md`,
-  `${getEnv("NTFY_ENDPOINT")}/question-generator`,
+  `${getEnv("LOG_PATH", "./")}/app.md`,
+  `${getEnv("NTFY_ENDPOINT", "https://ntfy.localhost")}/question-generator`,
 );
 
 // deno-lint-ignore no-explicit-any
