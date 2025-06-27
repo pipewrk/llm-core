@@ -14,7 +14,7 @@ describe("OpenAIService", () => {
 
   test("should initialize correctly with environment variables", () => {
     setEnv("OPENAI_ENDPOINT", "http://env-endpoint.test");
-    setEnv("OPENAI_API_KEY", "test-api")
+    setEnv("OPENAI_API_KEY", "test-api");
 
     const service = new OpenAIService(model);
 
@@ -25,7 +25,7 @@ describe("OpenAIService", () => {
 
   test("should sanitize JSON properly", () => {
     const sanitized = OpenAIService["sanitizeJson"](
-      '```json\n{"key": "value",}\n```',
+      '```json\n{"key": "value",}\n```'
     );
     expect(sanitized).toBe('{"key": "value"}');
   });
@@ -97,12 +97,17 @@ describe("OpenAIService", () => {
   // });
 
   test("should validate response with a custom check", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      json: mock().mockResolvedValue({
-        choices: [{ message: { content: '{"key": "valid"}' } }],
+    global.fetch = Object.assign(
+      mock().mockResolvedValue({
+        ok: true,
+        json: mock().mockResolvedValue({
+          choices: [{ message: { content: '{"key": "valid"}' } }],
+        }),
       }),
-    } as unknown as Response);
+      {
+        preconnect: () => {},
+      }
+    ) as typeof fetch;
 
     const service = new OpenAIService(model, endpoint);
 
@@ -113,19 +118,24 @@ describe("OpenAIService", () => {
       "system-prompt",
       "user-prompt",
       {},
-      customCheck,
+      customCheck
     );
 
     expect(result).toEqual({ key: "valid" });
   });
 
   test("should throw error if custom check fails", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      json: mock().mockResolvedValue({
-        choices: [{ message: { content: '{"key": "invalid"}' } }],
+    global.fetch = Object.assign(
+      mock().mockResolvedValue({
+        ok: true,
+        json: mock().mockResolvedValue({
+          choices: [{ message: { content: '{"key": "invalid"}' } }],
+        }),
       }),
-    } as unknown as Response);
+      {
+        preconnect: () => {},
+      }
+    ) as typeof fetch;
 
     const service = new OpenAIService(model, endpoint);
 
@@ -137,10 +147,10 @@ describe("OpenAIService", () => {
         "system-prompt",
         "user-prompt",
         {},
-        customCheck,
-      ),
+        customCheck
+      )
     ).rejects.toThrowError(
-      "Failed after 3 attempts to communicate with OpenAI.",
+      "Failed after 3 attempts to communicate with OpenAI."
     );
   });
 });

@@ -7,11 +7,11 @@ describe("OllamaService", () => {
   const logger = new MockLogger();
   const endpoint = "http://ollama.test";
   const model = "test-model";
-  
+
   beforeEach(() => {
     logger.clear();
   });
-  
+
   test("should initialize correctly with environment variables", () => {
     setEnv("OLLAMA_ENDPOINT", "http://env-endpoint.test");
     setEnv("OLLAMA_API_KEY", "test-api");
@@ -31,14 +31,19 @@ describe("OllamaService", () => {
   });
 
   test("should throw error if custom check fails", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      text: mock().mockResolvedValue(
-        JSON.stringify({
-          message: { content: '{"key": "invalid"}' },
-        })
-      ),
-    } as unknown as Response);
+    global.fetch = Object.assign(
+      mock().mockResolvedValue({
+        ok: true,
+        text: mock().mockResolvedValue(
+          JSON.stringify({
+            message: { content: '{"key": "invalid"}' },
+          })
+        ),
+      }),
+      {
+        preconnect: () => {}, // or mock() if you want to assert it
+      }
+    );
 
     const service = new OllamaService(model, endpoint);
 
@@ -58,17 +63,22 @@ describe("OllamaService", () => {
   });
 
   test("should validate response with a custom check", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      json: mock().mockResolvedValue({
-        message: { content: '{"key": "valid"}' },
-      }),
-      text: mock().mockResolvedValue(
-        JSON.stringify({
+    global.fetch = Object.assign(
+      mock().mockResolvedValue({
+        ok: true,
+        json: mock().mockResolvedValue({
           message: { content: '{"key": "valid"}' },
-        })
-      ),      
-    } as unknown as Response);
+        }),
+        text: mock().mockResolvedValue(
+          JSON.stringify({
+            message: { content: '{"key": "valid"}' },
+          })
+        ),
+      }),
+      {
+        preconnect: () => {}, // stub to satisfy Bun's fetch shape
+      }
+    ) as typeof fetch;
 
     const service = new OllamaService(model, endpoint);
 
@@ -86,17 +96,22 @@ describe("OllamaService", () => {
   });
 
   test("should throw error if custom check fails", async () => {
-    global.fetch = mock().mockResolvedValue({
-      ok: true,
-      json: mock().mockResolvedValue({
-        message: { content: '{"key": "invalid"}' },
-      }),
-      text: mock().mockResolvedValue(
-        JSON.stringify({
+    global.fetch = Object.assign(
+      mock().mockResolvedValue({
+        ok: true,
+        json: mock().mockResolvedValue({
           message: { content: '{"key": "invalid"}' },
-        })
-      ),      
-    } as unknown as Response);
+        }),
+        text: mock().mockResolvedValue(
+          JSON.stringify({
+            message: { content: '{"key": "invalid"}' },
+          })
+        ),
+      }),
+      {
+        preconnect: () => {}, // stub to satisfy Bun's fetch shape
+      }
+    ) as typeof fetch;
 
     const service = new OllamaService(model, endpoint);
 
