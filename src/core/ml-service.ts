@@ -48,4 +48,8 @@ export abstract class MLService<T> {
     MLService._instances.set(key, instance);
     return instance;
   }
+
+  protected static clearInstance(key: string): void {
+    MLService._instances.delete(key);
+  }
 }

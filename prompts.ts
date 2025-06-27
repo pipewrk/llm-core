@@ -1,8 +1,15 @@
 import type {
-  PromptShape, OptionsShape, NewsExtractionResponse, ArticleCountResponse,
-  SingleQuestionResponse, QuestionsResponse, AnswerResponse, SnippetResponse, DirectiveResponse,
-  TransformationDirectiveResponse, 
-} from './src/types/prompts'
+  PromptShape,
+  OptionsShape,
+  NewsExtractionResponse,
+  ArticleCountResponse,
+  SingleQuestionResponse,
+  QuestionsResponse,
+  AnswerResponse,
+  SnippetResponse,
+  DirectiveResponse,
+  TransformationDirectiveResponse,
+} from "./src/types/prompts";
 
 /**
  * Creates a prompt set for extracting structured news article data from Markdown content.
@@ -17,7 +24,10 @@ import type {
  *
  * @returns {PromptShape<NewsExtractionResponse>} A structured prompt object ready for use with an LLM call.
  */
-export function createNewsExtractionPrompt(markdown: string, articleCount: number): PromptShape<NewsExtractionResponse> {
+export function createNewsExtractionPrompt(
+  markdown: string,
+  articleCount: number
+): PromptShape<NewsExtractionResponse> {
   const systemPrompt = `
   You are an intelligent parser that extracts structured data from markdown-based news headlines.
   Your output must always be in **valid JSON**. Ensure that all extracted links retain their associated text.
@@ -80,7 +90,6 @@ export function createNewsExtractionPrompt(markdown: string, articleCount: numbe
   return { systemPrompt, userPrompt, options };
 }
 
-
 /**
  * Creates a prompt set for counting the number of unique, valid news articles in Markdown.
  *
@@ -91,7 +100,9 @@ export function createNewsExtractionPrompt(markdown: string, articleCount: numbe
  *
  * @returns {PromptShape<ArticleCountResponse>}  - Prompt and schema for use in a counting task.
  */
-export function createArticleCountPrompt(markdown: string): PromptShape<ArticleCountResponse> {
+export function createArticleCountPrompt(
+  markdown: string
+): PromptShape<ArticleCountResponse> {
   const systemPrompt = `
   You are an intelligent parser that analyzes markdown-based news headlines and extracts the number of unique articles present.
   Your task is to **accurately count** the number of valid articles in the provided markdown content.
@@ -136,7 +147,6 @@ export function createArticleCountPrompt(markdown: string): PromptShape<ArticleC
   return { systemPrompt, userPrompt, options };
 }
 
-
 /**
  * Creates a prompt for synthesising a single high-quality question from a cluster of semantically similar ones.
  *
@@ -148,7 +158,10 @@ export function createArticleCountPrompt(markdown: string): PromptShape<ArticleC
  *
  * @returns {PromptShape<SingleQuestionResponse>};
  */
-export function createSingleQnPrompt(cluster: string[], context: string): PromptShape<SingleQuestionResponse> {
+export function createSingleQnPrompt(
+  cluster: string[],
+  context: string
+): PromptShape<SingleQuestionResponse> {
   const systemPrompt = "You are a concise and precise question generator.";
   const userPrompt = `Context: ${context}
 These questions are semantically similar:
@@ -184,7 +197,7 @@ Combine these into one high-quality, brief, and concise question. Format the res
 export function createSectionProcessingPrompt(
   section: string,
   generationTarget: number,
-  isReleaseNotes: boolean,
+  isReleaseNotes: boolean
 ): PromptShape<QuestionsResponse> {
   const userPrompt = isReleaseNotes
     ? `Generate exactly ${generationTarget} unique questions from these release notes.
@@ -238,12 +251,10 @@ Content: ${section}`;
 export function createAnswerPrompt(
   content: string,
   question: string,
-  totalQuestions: number,
+  totalQuestions: number
 ): PromptShape<AnswerResponse> {
-  const systemPrompt =
-    `You are a world class content expert, helping to answer questions based on the provided information.`;
-  const userPrompt =
-    `You are currently answering one out of ${totalQuestions} for the given content below. 
+  const systemPrompt = `You are a world class content expert, helping to answer questions based on the provided information.`;
+  const userPrompt = `You are currently answering one out of ${totalQuestions} for the given content below. 
   **Instructions:
   1. You must answer the question as well as you can while staying within the bounds of the question. 
   2. If examples are requested, please include real-world examples relevant to the content.
@@ -267,29 +278,31 @@ export function createAnswerPrompt(
     schema: {
       type: "object",
       required: ["answer"],
-      answer: { type: "string" },
+      properties: {
+        answer: { type: "string" },
+      },
     },
   };
   return { systemPrompt, userPrompt, options };
 }
-/**
- * Creates a prompt for extracting a relevant snippet from the provided content based on a specific question.
- *
- * This function generates a system prompt and a user prompt designed to guide
- * an AI in extracting the most relevant section of the content that answers
- * the given question. The extraction is intended to be precise, ensuring the
- * snippet can stand alone with full context.
- *
- * @param content The original content from which the snippet should be extracted.
- * @param question The question guiding the snippet extraction.
- * @returns An object containing the system and user prompts for snippet extraction.
- */
 
-export function createSnippetPrompt(content: string, question: string) {
-  const systemPrompt =
-    `You are a sniper snippet extractor. You extract precise snippets from given content while ensuring they remain independently contextual.`;
-  const userPrompt =
-    `For the given question, please extract the single most relevant section of the original content that is relevant to the question.
+/**
+ * Creates a prompt for extracting a standalone, contextually complete snippet that answers a question.
+ *
+ * The LLM is instructed to return the most relevant section of the content that matches the question,
+ * without modifying or fabricating any part of it. Meant for precise quote extraction.
+ *
+ * @param {string} content - The original source text.
+ * @param {string} question - The guiding question used to locate the relevant snippet.
+ *
+ * @returns {PromptShape<SnippetResponse>} - Prompt set and validation shape for snippet extraction tasks.
+ */
+export function createSnippetPrompt(
+  content: string,
+  question: string
+): PromptShape<SnippetResponse> {
+  const systemPrompt = `You are a sniper snippet extractor. You extract precise snippets from given content while ensuring they remain independently contextual.`;
+  const userPrompt = `For the given question, please extract the single most relevant section of the original content that is relevant to the question.
   
   **Instructions**:
   1) You must extract the relevant section exactly as it is to preserve the authenticity of the original content.
@@ -308,7 +321,7 @@ export function createSnippetPrompt(content: string, question: string) {
   ${content}
   ---
   `;
-  const options = {
+  const options: OptionsShape<SnippetResponse> = {
     schema_name: "snippet_schema",
     schema: {
       type: "object",
@@ -321,11 +334,22 @@ export function createSnippetPrompt(content: string, question: string) {
   return { systemPrompt, userPrompt, options };
 }
 
-export function createDirectivePrompt(content: string) {
+/**
+ * Creates a prompt that transforms a piece of writing into a list of editorial-style directives.
+ *
+ * Designed to analyse tone, narrative voice, and authorial intent, and extract reusable,
+ * prescriptive writing instructions from the text.
+ *
+ * @param {string} content - The article or excerpt to convert into writing directives.
+ *
+ * @returns {PromptShape<DirectiveResponse>} - A structured prompt and schema to extract writing directives.
+ */
+export function createDirectivePrompt(
+  content: string
+): PromptShape<DirectiveResponse> {
   const systemPrompt =
     "You are a discerning editor skilled in deconstructing text into actionable writing directives.";
-  const userPrompt =
-    `Analyse the following article and generate a list of writing directives that reflect the author's unique style, tone, and approach. The directives should be clear instructions such as "Write an engaging introduction about [topic]", "Create a detailed section on [concept]", or "Compose a witty conclusion summarising [theme]".
+  const userPrompt = `Analyse the following article and generate a list of writing directives that reflect the author's unique style, tone, and approach. The directives should be clear instructions such as "Write an engaging introduction about [topic]", "Create a detailed section on [concept]", or "Compose a witty conclusion summarising [theme]".
 
 For example, consider this excerpt from one of the articles:
 ---
@@ -342,7 +366,7 @@ The way I see it? If you're going to clone a repo anyway, just use \`/srv\`. Her
 ├── downloads.example.com
 \`\`\`
 
-In each directory, your web root can be named according to any convention you like—\`webroot\`, \`public\` or simply just \`app\`. This directory is what you \`chgrp\` to \`www-data\`.
+In each directory, your web root can be named according to any convention you like \`webroot\`, \`public\` or simply just \`app\`. This directory is what you \`chgrp\` to \`www-data\`.
 
 It's worth mentioning that the web root is not always needed, especially if you're using \`docker\` to manage the backend service."
 ---
@@ -359,7 +383,7 @@ ${content}
 
 Format your response as JSON with a "directives" field that is an array of directive strings.`;
 
-  const options = {
+  const options: OptionsShape<DirectiveResponse> = {
     schema_name: "directive_schema",
     schema: {
       type: "object",
@@ -376,14 +400,24 @@ Format your response as JSON with a "directives" field that is an array of direc
   return { systemPrompt, userPrompt, options };
 }
 
+/**
+ * Creates a prompt for generating a creative directive to transform a piece of writing.
+ *
+ * Accepts a transformation goal (e.g., "make it humorous") and returns an actionable instruction
+ * describing how to rework the original content in that style.
+ *
+ * @param {string} content - The original article excerpt to transform.
+ * @param {string} transformation - A high-level instruction for transformation (e.g., poetic, humorous).
+ *
+ * @returns {PromptShape<TransformationDirectiveResponse>} - Prompt and schema to generate content transformation directives.
+ */
 export function createDirectiveForTransformationPrompt(
   content: string,
-  transformation: string,
-) {
+  transformation: string
+): PromptShape<TransformationDirectiveResponse> {
   const systemPrompt =
     "You are a creative strategist skilled in reimagining existing content.";
-  const userPrompt =
-    `Based on the following article excerpt, generate a writing directive that instructs the creation of a transformed piece of content. The transformation should align with the instruction provided (e.g., "Create a humorous introduction" or "Develop a poetic summary").
+  const userPrompt = `Based on the following article excerpt, generate a writing directive that instructs the creation of a transformed piece of content. The transformation should align with the instruction provided (e.g., "Create a humorous introduction" or "Develop a poetic summary").
 
 For example, consider this excerpt from another article:
 ---
@@ -409,7 +443,7 @@ ${content}
 
 Format your response as JSON with a "directive" field.`;
 
-  const options = {
+  const options: OptionsShape<TransformationDirectiveResponse> = {
     schema_name: "transformation_directive_schema",
     schema: {
       type: "object",

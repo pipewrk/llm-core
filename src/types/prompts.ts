@@ -1,14 +1,16 @@
 /**
- * types.ts — Shared JSON schema types for all structured prompt functions.
+ * Shared JSON schema types for all structured prompt functions.
  */
 
 export interface PromptShape<T extends JSONSchemaObject> {
   systemPrompt: string;
   userPrompt: string;
-  options: {
-    schema_name: string;
-    schema: T;
-  };
+  options: OptionsShape<T>;
+}
+
+export interface OptionsShape<T extends JSONSchemaObject> {
+  schema_name: string;
+  schema: T;
 }
 
 export interface JSONSchemaObject {
@@ -18,7 +20,14 @@ export interface JSONSchemaObject {
   additionalProperties?: boolean;
 }
 
-export type JSONSchemaType = "string" | "integer" | "array" | "object" | "boolean" | ["string", "null"] | ["object", "null"];
+export type JSONSchemaType =
+  | "string"
+  | "integer"
+  | "array"
+  | "object"
+  | "boolean"
+  | ["string", "null"]
+  | ["object", "null"];
 
 export interface JSONSchemaProperty {
   type: JSONSchemaType;

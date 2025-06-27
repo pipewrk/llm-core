@@ -1,3 +1,18 @@
+/**
+ * News Extraction & Classification Pipeline
+ * 
+ * This script fetches news content in markdown form using a proxy scraping API (`r.jina.ai`),
+ * parses and structures it into articles, optionally classifies them using an AI-based
+ * zero-shot classifier (e.g., OpenAI's embedding models), and groups them into categories.
+ *
+ * Sources are defined per label (e.g., "breaking_news") per site (e.g., "bbc", "apnews").
+ * Input and output directories are read from environment variables.
+ *
+ * Usage:
+ *   bun run script.ts <source> <label>
+ * Or used programmatically via `processMultipleSources()` and a pre-defined config.
+ */
+
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import { visit } from "unist-util-visit";
@@ -44,8 +59,14 @@ export type ExtractNewsFromFileArgs = {
   filename: string;
   ignoreList: string[];
 };
+
 /**
- * Fetches and returns markdown content from a given URL.
+ * Fetches markdown content from a given URL using Jina’s reverse proxy and selector.
+ * 
+ * @param url - The target URL to scrape.
+ * @param selector - CSS selector used by the proxy to extract content.
+ * @returns Raw markdown string extracted from the target page.
+ * @throws If the HTTP response fails.
  */
 export async function fetchMarkdownContent({
   url,
@@ -66,14 +87,21 @@ export async function fetchMarkdownContent({
 }
 
 /**
- * Determines whether a title should be ignored based on an ignore list.
+ * Determines if a given article title should be ignored based on ignore patterns.
+ * 
+ * @param title - The article title to evaluate.
+ * @param ignoreList - List of string filters to match against.
+ * @returns True if the title matches any filter.
  */
 export function shouldIgnoreTitle(title: string, ignoreList: string[]): boolean {
   return ignoreList.some((filter) => title.includes(filter));
 }
 
 /**
- * Extracts unique links from markdown content.
+ * Extracts all unique external links from markdown content.
+ * 
+ * @param markdown - Raw markdown input.
+ * @returns A set of unique HTTP(S) URLs.
  */
 export function extractUniqueLinks(markdown: string): Set<string> {
   const tree = unified().use(remarkParse).parse(markdown);
@@ -89,7 +117,12 @@ export function extractUniqueLinks(markdown: string): Set<string> {
 }
 
 /**
- * Parses markdown and extracts structured news articles.
+ * Parses markdown and structures news articles with titles, links, and optional images.
+ * Handles inline image captions and de-duplicates entries.
+ * 
+ * @param markdown - Raw markdown string from a source.
+ * @param ignoreList - List of title patterns to exclude.
+ * @returns An array of structured news articles.
  */
 export function extractNewsArticles({
   markdown,
@@ -151,6 +184,16 @@ export interface DownloadAndExtractArgs {
 }
 
 
+/**
+ * Loads markdown for a given site/label combo, either from disk or by fetching it.
+ * Then extracts articles into structured form.
+ *
+ * @param cats - Category labels to be used downstream.
+ * @param label - Label for the content (e.g., "breaking_news").
+ * @param config - Site configuration containing selector and URL+filename mapping.
+ * @param ignored - List of patterns to filter out irrelevant articles.
+ * @returns Structured article list (not yet classified).
+ */
 async function downloadAndExtract({cats, label, config, ignored}: DownloadAndExtractArgs) {
   const { urls } = config;
   const cat = urls.find((url) => url.label === label);
@@ -182,11 +225,12 @@ async function downloadAndExtract({cats, label, config, ignored}: DownloadAndExt
 }
 
 /**
- * Classifies news articles into predefined categories based on their titles.
- *
- * @param structuredNews - Array of news articles with at least a `title` property.
- * @param categories - Array of category labels to classify the articles.
- * @returns A Promise resolving to a `{ [category]: NewsExtractionResponse[] }` mapping.
+ * Uses a zero-shot classifier to assign categories to structured news articles.
+ * 
+ * @param structuredNews - Array of news articles with `title` and `link`.
+ * @param categories - Labels to classify into (e.g., politics, tech).
+ * @returns An object mapping each category to its matched articles.
+ * @throws If no input articles are provided.
  */
 export async function classifyNewsArticles(
   structuredNews: NewsExtractionResponse[],
@@ -214,39 +258,13 @@ export async function classifyNewsArticles(
   return groupedArticles;
 }
 
-async function main() {
-
-  const ignored = await Bun.file('./src/ignore.json').json()
-  const sites = await Bun.file('./src/sites.json').json()
-  const categories = await Bun.file('./src/categories.json').json()
-
-  const args = process.argv.slice(2); // Skip the first two elements (bun and script name)
-
-  if (args.length !== 2) {
-    console.error("Usage: bun run your-script.ts <label> <source>");
-    process.exit(1);
-  }
-
-  const [source, label] = args;
-
-  const config = sites[source as Source];
-  if (!config) {
-    throw new Error(`Site not found: ${source}`);
-  }  
-
-  try {
-    await downloadAndExtract({
-      cats: categories,
-      ignored,
-      label,
-      config,
-    });
-  } catch (err) {
-    console.error("An error occurred:", err);
-    process.exit(1);
-  }
-}
-
+/**
+ * Processes and classifies news across multiple sources and labels.
+ * Aggregates all results into a master category map and writes final output.
+ * 
+ * @param sourcesWithLabels - Mapping of source → label list (e.g., { bbc: ["breaking_news"] }).
+ * @returns Master dictionary mapping each category to matched articles (with source info).
+ */
 async function processMultipleSources(sourcesWithLabels: { [source: string]: string[] }) {
   const ignored = await Bun.file("./src/ignore.json").json();
   const sites = await Bun.file("./src/sites.json").json();
@@ -314,6 +332,41 @@ const sourcesWithLabels = {
   await Bun.write(getJson("output.json"), JSON.stringify(result, null, 2));
   // console.log("📊 Final Categorized Results:", result);
 })();
+
+
+
+async function main() {
+
+  const ignored = await Bun.file('./src/ignore.json').json()
+  const sites = await Bun.file('./src/sites.json').json()
+  const categories = await Bun.file('./src/categories.json').json()
+
+  const args = process.argv.slice(2); // Skip the first two elements (bun and script name)
+
+  if (args.length !== 2) {
+    console.error("Usage: bun run your-script.ts <label> <source>");
+    process.exit(1);
+  }
+
+  const [source, label] = args;
+
+  const config = sites[source as Source];
+  if (!config) {
+    throw new Error(`Site not found: ${source}`);
+  }  
+
+  try {
+    await downloadAndExtract({
+      cats: categories,
+      ignored,
+      label,
+      config,
+    });
+  } catch (err) {
+    console.error("An error occurred:", err);
+    process.exit(1);
+  }
+}
 
 
 // main();
