@@ -1,13 +1,23 @@
-// prompts.ts
-
+import type {
+  PromptShape, OptionsShape, NewsExtractionResponse, ArticleCountResponse,
+  SingleQuestionResponse, QuestionsResponse, AnswerResponse, SnippetResponse, DirectiveResponse,
+  TransformationDirectiveResponse, 
+} from './src/types/prompts'
 
 /**
- * Creates a prompt for extracting structured news data from markdown content.
- * @param markdown The raw markdown content containing news headlines.
- * @param articleCount The number of valid articles detected in the markdown.
- * @returns A prompt object with system and user prompts.
+ * Creates a prompt set for extracting structured news article data from Markdown content.
+ *
+ * The prompt guides a language model to extract valid articles, including title, link,
+ * optional description, and optional image (with URL and caption).
+ *
+ * Designed for use with newsletter-style or scraped Markdown sources where structure is loose.
+ *
+ * @param {string} markdown - The raw Markdown content containing loosely structured news articles.
+ * @param {number} articleCount - Estimated number of valid articles in the input (used as a hint).
+ *
+ * @returns {PromptShape<NewsExtractionResponse>} A structured prompt object ready for use with an LLM call.
  */
-export function createNewsExtractionPrompt(markdown: string, articleCount: number) {
+export function createNewsExtractionPrompt(markdown: string, articleCount: number): PromptShape<NewsExtractionResponse> {
   const systemPrompt = `
   You are an intelligent parser that extracts structured data from markdown-based news headlines.
   Your output must always be in **valid JSON**. Ensure that all extracted links retain their associated text.
@@ -36,7 +46,7 @@ export function createNewsExtractionPrompt(markdown: string, articleCount: numbe
   ${markdown}
   `;
 
-  const options = {
+  const options: OptionsShape<NewsExtractionResponse> = {
     schema_name: "news_extraction_schema",
     schema: {
       type: "object",
@@ -72,11 +82,16 @@ export function createNewsExtractionPrompt(markdown: string, articleCount: numbe
 
 
 /**
- * Creates a prompt for counting valid news articles from markdown content.
- * @param markdown The raw markdown content containing news headlines.
- * @returns A prompt object with system and user prompts.
+ * Creates a prompt set for counting the number of unique, valid news articles in Markdown.
+ *
+ * Valid articles must contain both a title and a link. Descriptions and images are optional.
+ * The prompt is structured to instruct the LLM to return a JSON object with a single `article_count` integer.
+ *
+ * @param {string} markdown - The Markdown content to be scanned for valid article entries.
+ *
+ * @returns {PromptShape<ArticleCountResponse>}  - Prompt and schema for use in a counting task.
  */
-export function createArticleCountPrompt(markdown: string) {
+export function createArticleCountPrompt(markdown: string): PromptShape<ArticleCountResponse> {
   const systemPrompt = `
   You are an intelligent parser that analyzes markdown-based news headlines and extracts the number of unique articles present.
   Your task is to **accurately count** the number of valid articles in the provided markdown content.
@@ -107,8 +122,7 @@ export function createArticleCountPrompt(markdown: string) {
   }
   \`\`\`
   `;
-
-  const options = {
+  const options: OptionsShape<ArticleCountResponse> = {
     schema_name: "article_count_schema",
     schema: {
       type: "object",
@@ -124,12 +138,17 @@ export function createArticleCountPrompt(markdown: string) {
 
 
 /**
- * Creates a prompt for synthesizing a single question from a cluster of similar questions.
- * @param cluster The list of questions in the cluster.
- * @param context The text that the questions are about.
- * @returns A prompt object with system and user prompts.
+ * Creates a prompt for synthesising a single high-quality question from a cluster of semantically similar ones.
+ *
+ * Intended to de-duplicate and unify intent across multiple phrased questions.
+ * The output format is strictly JSON with a single `question` string field.
+ *
+ * @param {string[]} cluster - A list of semantically similar user or AI-generated questions.
+ * @param {string} context - Contextual text (e.g., documentation or passage) that the questions relate to.
+ *
+ * @returns {PromptShape<SingleQuestionResponse>};
  */
-export function createSingleQnPrompt(cluster: string[], context: string) {
+export function createSingleQnPrompt(cluster: string[], context: string): PromptShape<SingleQuestionResponse> {
   const systemPrompt = "You are a concise and precise question generator.";
   const userPrompt = `Context: ${context}
 These questions are semantically similar:
@@ -137,7 +156,7 @@ ${cluster.map((q, i) => `${i + 1}. ${q}`).join("\n")}
 
 Combine these into one high-quality, brief, and concise question. Format the response as JSON with a 'question' field.`;
 
-  const options = {
+  const options: OptionsShape<SingleQuestionResponse> = {
     schema_name: "question_schema",
     schema: {
       type: "object",
@@ -151,22 +170,22 @@ Combine these into one high-quality, brief, and concise question. Format the res
 }
 
 /**
- * Creates a prompt for processing a section of content into questions.
+ * Creates a prompt to generate multiple unique questions from a content section.
  *
- * This function generates a system prompt and a user prompt based on whether
- * the content is release notes or documentation. The prompts guide the generation
- * of a specified number of unique questions from the content.
+ * Used to turn a block of content into insightful and varied questions. Differentiates
+ * behaviour based on whether the input is release notes or general documentation.
  *
- * @param section - The content section to generate questions from.
- * @param generationTarget - The target number of questions to generate.
- * @param isReleaseNotes - A flag indicating if the content is release notes.
- * @returns An object containing the system prompt and user prompt for question generation.
+ * @param {string} section - The raw content to analyse and extract questions from.
+ * @param {number} generationTarget - Exact number of questions to generate.
+ * @param {boolean} isReleaseNotes - Whether the content is release notes (vs documentation).
+ *
+ * @returns {PromptShape<QuestionsResponse>} - Prompt and schema for use in bulk question generation.
  */
 export function createSectionProcessingPrompt(
   section: string,
   generationTarget: number,
   isReleaseNotes: boolean,
-) {
+): PromptShape<QuestionsResponse> {
   const userPrompt = isReleaseNotes
     ? `Generate exactly ${generationTarget} unique questions from these release notes.
 Focus on changes, features, improvements.
@@ -181,7 +200,7 @@ Content: ${section}`;
     ? `You are a helpful assistant generating questions about software release notes.`
     : `You are a helpful assistant generating questions about technical documentation.`;
 
-  const options = {
+  const options: OptionsShape<QuestionsResponse> = {
     schema_name: "questions_schema",
     schema: {
       type: "object",
@@ -205,23 +224,22 @@ Content: ${section}`;
 }
 
 /**
- * Creates a prompt for generating an answer to a specific question based on provided content.
+ * Creates a prompt that generates an answer to a given question based on provided content.
  *
- * This function generates a system prompt and a user prompt to assist an AI in
- * crafting a well-informed answer to a given question using the provided content.
- * The prompts ensure the response is relevant, concise, and formatted correctly.
+ * Instructs the AI to remain strictly within the bounds of the content, avoid hallucination,
+ * and structure the response in Markdown within a valid JSON wrapper.
  *
- * @param content - The content used to answer the question.
- * @param question - The question that requires an answer.
- * @param totalQuestions - The total number of questions being addressed.
- * @returns An object containing the system prompt and user prompt for answer generation.
+ * @param {string} content - The reference content to base the answer on.
+ * @param {string} question - The question being answered.
+ * @param {number} totalQuestions - Total number of questions in the set (used for positional awareness).
+ *
+ * @returns {PromptShape<AnswerResponse>} - Fully structured prompt and expected response shape.
  */
-
 export function createAnswerPrompt(
   content: string,
   question: string,
   totalQuestions: number,
-) {
+): PromptShape<AnswerResponse> {
   const systemPrompt =
     `You are a world class content expert, helping to answer questions based on the provided information.`;
   const userPrompt =
@@ -244,7 +262,7 @@ export function createAnswerPrompt(
   ${content}
   ---
   `;
-  const options = {
+  const options: OptionsShape<AnswerResponse> = {
     schema_name: "answer_schema",
     schema: {
       type: "object",
