@@ -1,6 +1,6 @@
 // File: ./tests/logger.mock.ts
 
-import type { ILogger } from "../../types/dataset";
+import type { ILogger } from "../types/dataset";
 
 /**
  * MockLogger is a mock implementation of the Logger class.

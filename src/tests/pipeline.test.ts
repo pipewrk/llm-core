@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { ILogger } from "../../types/dataset"; // Adjust the import path if necessary
-import { pipeline, type PipelineStep } from "../pipeline";
+import type { ILogger } from "../types/dataset"; // Adjust the import path if necessary
+import { pipeline, type PipelineStep } from "../core/pipeline";
 import { MockLogger } from "./logger.mock";
 import { appendStep, uppercaseStep } from "./steps.mock";
-import { setEnv } from "../env";
+import { setEnv } from "../core/env";
 
 describe("Generic Pipeline Tests", () => {
   const logger = new MockLogger();

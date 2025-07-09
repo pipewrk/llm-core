@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { OpenAIService } from "../openai-service";
+import { OpenAIService } from "../core/openai-service";
 import { MockLogger } from "./logger.mock";
-import { getEnv, setEnv } from "../env";
+import { getEnv, setEnv } from "../core/env";
 
 describe("OpenAIService", () => {
   const logger = new MockLogger();

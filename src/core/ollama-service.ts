@@ -16,7 +16,7 @@ export class OllamaService extends LLMService {
   constructor(
     model: string,
     endpoint = getEnv("OLLAMA_ENDPOINT"),
-    apiKey = getEnv("OLLAMA_API_KEY"),
+    apiKey = getEnv("OLLAMA_API_KEY")
   ) {
     super();
     this.endpoint = endpoint;
@@ -40,7 +40,7 @@ export class OllamaService extends LLMService {
   private async sendRequest<T>(
     messages: { role: string; content: string }[],
     options: Record<string, unknown>,
-    customCheck?: (response: T) => T | boolean,
+    customCheck?: (response: T) => T | boolean
   ): Promise<T> {
     const { schema } = options;
     const payload = {
@@ -54,9 +54,7 @@ export class OllamaService extends LLMService {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         this.logger.info(
-          `Sending request to Ollama (attempt ${
-            attempt + 1
-          }/${MAX_RETRIES})...`,
+          `Sending request to Ollama (attempt ${attempt + 1}/${MAX_RETRIES})...`
         );
 
         const response = await fetch(`${this.endpoint}/api/chat`, {
@@ -82,7 +80,7 @@ export class OllamaService extends LLMService {
           responseJson = JSON.parse(responseText);
         } catch (jsonErr) {
           this.logger.error(
-            `Error parsing responseText: ${(jsonErr as Error).message}`,
+            `Error parsing responseText: ${(jsonErr as Error).message}`
           );
           throw jsonErr;
         }
@@ -90,10 +88,10 @@ export class OllamaService extends LLMService {
         const rawContent = responseJson?.message?.content;
         if (!rawContent) {
           this.logger.error(
-            "Ollama API returned an unexpected structure (no content).",
+            "Ollama API returned an unexpected structure (no content)."
           );
           throw new Error(
-            "Ollama API returned an unexpected structure (no content).",
+            "Ollama API returned an unexpected structure (no content)."
           );
         }
 
@@ -104,18 +102,18 @@ export class OllamaService extends LLMService {
           parsedResponse = JSON.parse(sanitized) as T;
         } catch (parseErr) {
           this.logger.error(
-            `Error parsing sanitized JSON: ${(parseErr as Error).message}`,
+            `Error parsing sanitized JSON: ${(parseErr as Error).message}`
           );
           // Fallback: try a double-parse if the content is double-encoded.
           try {
             const sanitized = OllamaService.sanitizeJson(rawContent);
             this.logger.info(
-              `Attempting double JSON.parse on sanitized response: ${sanitized}`,
+              `Attempting double JSON.parse on sanitized response: ${sanitized}`
             );
             parsedResponse = JSON.parse(JSON.parse(sanitized)) as T;
           } catch (doubleParseErr) {
             this.logger.error(
-              `Double JSON.parse error: ${(doubleParseErr as Error).message}`,
+              `Double JSON.parse error: ${(doubleParseErr as Error).message}`
             );
             throw doubleParseErr;
           }
@@ -125,7 +123,7 @@ export class OllamaService extends LLMService {
         if (customCheck) {
           const checkResult = customCheck(parsedResponse);
           this.logger.info(
-            `Custom check result: ${JSON.stringify(checkResult)}`,
+            `Custom check result: ${JSON.stringify(checkResult)}`
           );
           if (checkResult === false) {
             this.logger.error("Response failed custom check");
@@ -139,11 +137,11 @@ export class OllamaService extends LLMService {
         return parsedResponse;
       } catch (err) {
         this.logger.error(
-          `Attempt ${attempt + 1} failed: ${(err as Error).message}`,
+          `Attempt ${attempt + 1} failed: ${(err as Error).message}`
         );
         if (attempt === MAX_RETRIES - 1) {
           throw new Error(
-            `Failed after ${MAX_RETRIES} attempts to communicate with Ollama.`,
+            `Failed after ${MAX_RETRIES} attempts to communicate with Ollama.`
           );
         }
         // Wait 1 second before retrying.
@@ -152,6 +150,85 @@ export class OllamaService extends LLMService {
     }
 
     throw new Error("Unexpected error in OllamaService.sendRequest");
+  }
+
+  public async embedTexts(inputs: string[]): Promise<number[][]> {
+    const url = `${this.endpoint}/api/embeddings`;
+    const MAX_RETRIES = 3;
+    let lastError: Error | null = null;
+
+    const results: number[][] = [];
+
+    for (const input of inputs) {
+      let success = false;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES && !success; attempt++) {
+        try {
+          this.logger.info(
+            `Embedding request to Ollama for prompt "${input.slice(
+              0,
+              50
+            )}..." (attempt ${attempt}/${MAX_RETRIES})`
+          );
+
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(this.apiKey
+                ? { Authorization: `Bearer ${this.apiKey}` }
+                : {}),
+            },
+            body: JSON.stringify({ model: this.model, prompt: input }),
+          });
+
+          const raw = await res.text();
+          if (!res.ok) {
+            this.logger.error(`Embed API returned HTTP ${res.status}: ${raw}`);
+            throw new Error(`Ollama embed failed with status ${res.status}`);
+          }
+
+          let json: { embedding: number[] };
+          try {
+            json = JSON.parse(raw);
+          } catch (parseErr) {
+            this.logger.error(
+              `Failed to parse embed response JSON: ${
+                (parseErr as Error).message
+              }`
+            );
+            throw parseErr;
+          }
+
+          if (!Array.isArray(json.embedding)) {
+            this.logger.error(`Unexpected embed response structure: ${raw}`);
+            throw new Error("Invalid embed response format");
+          }
+
+          results.push(json.embedding);
+          success = true;
+        } catch (err) {
+          lastError = err as Error;
+          this.logger.error(
+            `Embed attempt ${attempt} for "${input.slice(0, 30)}..." failed: ${
+              lastError.message
+            }`
+          );
+          if (attempt < MAX_RETRIES)
+            await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    }
+
+    if (results.length !== inputs.length) {
+      throw new Error(
+        `Embedding failed for ${
+          inputs.length - results.length
+        } inputs. Last error: ${lastError?.message}`
+      );
+    }
+
+    return results;
   }
 
   /**
@@ -168,7 +245,7 @@ export class OllamaService extends LLMService {
     systemPrompt: string,
     userPrompt: string,
     options: Record<string, unknown>,
-    customCheck?: (response: T) => T | boolean,
+    customCheck?: (response: T) => T | boolean
   ): Promise<T> {
     const messages = [
       { role: "system", content: systemPrompt },

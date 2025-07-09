@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { getEnv, setEnv } from "../env.ts";
-import { OllamaService } from "../ollama-service.ts";
+import { getEnv, setEnv } from "../core/env.ts";
+import { OllamaService } from "../core/ollama-service.ts";
 import { MockLogger } from "./logger.mock.ts";
 
 describe("OllamaService", () => {
@@ -128,5 +128,83 @@ describe("OllamaService", () => {
     ).rejects.toThrowError(
       "Failed after 3 attempts to communicate with Ollama."
     );
+  });
+
+  test("embedTexts returns embeddings on success", async () => {
+    const fakeEmbeddings = [
+      [0.1, 0.2, 0.3],
+      [0.1, 0.2, 0.3],
+    ];
+
+    // Define mock responses as raw JSON strings
+    const mockJson = JSON.stringify({ embedding: [0.1, 0.2, 0.3] });
+
+    // Create two mock Response objects
+    const mockResponse1 = {
+      ok: true,
+      text: mock().mockResolvedValue(mockJson),
+    };
+
+    const mockResponse2 = {
+      ok: true,
+      text: mock().mockResolvedValue(mockJson),
+    };
+
+    // Global fetch mock to return these two responses in order
+    global.fetch = Object.assign(
+      mock()
+        .mockResolvedValueOnce(mockResponse1)
+        .mockResolvedValueOnce(mockResponse2),
+      { preconnect: () => {} }
+    ) as typeof fetch;
+
+    const service = new OllamaService(model, endpoint);
+    const result = await service.embedTexts(["hello", "world"]);
+
+    expect(result).toEqual(fakeEmbeddings);
+  });
+
+  test("embedTexts retries on failure then succeeds", async () => {
+    let callCount = 0;
+    global.fetch = (() => {
+      return mock().mockImplementation(() => {
+        callCount++;
+        if (callCount < 2) {
+          return Promise.resolve({
+            ok: false,
+            text: () => Promise.resolve("error"),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(JSON.stringify({ embedding: [0.5] })),
+        });
+      });
+    })() as unknown as typeof fetch;
+
+    const service = new OllamaService(model, endpoint);
+    const result = await service.embedTexts(["foo"]);
+    expect(result).toEqual([[0.5]]);
+    expect(callCount).toBe(2);
+  });
+
+  test("embedTexts retries up to max attempts before failing", async () => {
+    const fetchMock = mock().mockResolvedValue({
+      ok: false,
+      text: mock().mockResolvedValue("err"),
+    });
+
+    global.fetch = Object.assign(fetchMock, {
+      preconnect: () => {},
+    }) as typeof fetch;
+
+    const service = new OllamaService(model, endpoint);
+
+    await expect(service.embedTexts(["test"])).rejects.toThrow(
+      /Embedding failed/
+    );
+
+    // Expect 3 attempts
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

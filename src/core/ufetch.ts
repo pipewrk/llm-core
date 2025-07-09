@@ -1,3 +1,4 @@
+// ./ufetch.ts
 import { isBun } from "./runtime.ts";
 
 export async function uFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

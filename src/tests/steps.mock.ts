@@ -1,6 +1,6 @@
 // File: ./tests/steps.mock.ts
 
-import type { PipelineStep } from "../pipeline";
+import type { PipelineStep } from "../core/pipeline";
 
 /**
  * A sample PipelineStep that appends a string to a document's data.
