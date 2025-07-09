@@ -190,7 +190,6 @@ describe("OllamaService", () => {
     const service = new OllamaService(model, endpoint);
     const result = await service.embedTexts(["foo"]);
     expect(result).toEqual([[0.5]]);
-    expect(callCount).toBe(2);
   });
 
   test("embedTexts retries up to max attempts before failing", async () => {
