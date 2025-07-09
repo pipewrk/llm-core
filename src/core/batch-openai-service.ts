@@ -135,7 +135,6 @@ export class OpenAIBatchService implements BatchLLMService {
   private async uploadFile(filePath: string): Promise<string> {
     let formData = prepareFormData(filePath);
     const response = await uFetch(`${this.endpoint}/v1/files`, {
-      // ✅ Forces TS to use global fetch
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,

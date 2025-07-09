@@ -153,7 +153,7 @@ export function groupMarkdownSegmentsByHeadings(
         current = [];
       }
 
-      // ⬇️ This line is crucial: include the heading itself
+      // This line is crucial: include the heading itself
       current.push(seg.text);
       path = seg.headerPath;
     } else {
@@ -179,7 +179,7 @@ export function enforceChunkSizeBounds(
     const curr = chunks[i];
     const text = curr.text.trim();
 
-    // Case 1: Too long — split into chunks
+    // Case 1: Too long split into chunks
     if (text.length >= maxSize) {
       for (let j = 0; j < text.length; j += maxSize) {
         final.push({
@@ -190,7 +190,7 @@ export function enforceChunkSizeBounds(
       continue;
     }
 
-    // Case 2: Too short — try to merge
+    // Case 2: Too short try to merge
     if (text.length < minSize) {
       const prev = final.at(-1);
       const next = chunks[i + 1];
@@ -224,7 +224,7 @@ export function enforceChunkSizeBounds(
       continue;
     }
 
-    // Case 3: In bounds — use directly
+    // Case 3: In bounds use directly
     final.push({ text, headerPath: [...curr.headerPath] });
   }
 

@@ -330,7 +330,6 @@ const sourcesWithLabels = {
 (async () => {
   const result = await processMultipleSources(sourcesWithLabels);
   await Bun.write(getJson("output.json"), JSON.stringify(result, null, 2));
-  // console.log("📊 Final Categorized Results:", result);
 })();
 
 

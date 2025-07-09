@@ -134,7 +134,7 @@ This method generates vector embeddings for an array of text inputs.
 import { OllamaService } from '@jasonnathan/llm-core';
 
 // Use a model specifically trained for embeddings
-const ollama = new OllamaService('mxbai-embed-large');
+const ollama = new OllamaService('all-minilm:l6-v2');
 
 async function main() {
   const texts = [

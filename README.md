@@ -1,12 +1,36 @@
-# @jasonnathan/llm-core
+<p align="center">
+  <img src="./logo.png" alt="llm-core logo" width="360" />
 
-`@jasonnathan/llm-core` is a lightweight, modular TypeScript library for building robust, production-ready data processing and Large Language Model (LLM) workflows. It provides a focused set of powerful tools designed to solve common but complex problems in preparing, processing, and orchestrating LLM-centric tasks.
+  <h1 align="center">@jasonnathan/llm-core</h1>
+
+  <p align="center">
+    Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orchestration.
+  </p>
+
+  <p align="center">
+    <a href="https://github.com/jasonnathan/llm-core/actions">
+      <img alt="Build Status" src="https://github.com/jasonnathan/llm-core/actions/workflows/publish.yml/badge.svg" />
+    </a>
+    <a href="https://codecov.io/gh/jasonnathan/llm-core">
+      <img alt="Code Coverage" src="https://codecov.io/gh/jasonnathan/llm-core/branch/main/graph/badge.svg" />
+    </a>
+    <a href="https://www.npmjs.com/package/@jasonnathan/llm-core">
+      <img alt="npm version" src="https://img.shields.io/npm/v/@jasonnathan/llm-core" />
+    </a>
+    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Strict-blue?logo=typescript" />
+    <img alt="Bun" src="https://img.shields.io/badge/Runtime-Bun-%23000000?logo=bun" />
+    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  </p>
+</p>
+
+
+`llm-core` is a lightweight, modular TypeScript library for building robust, production-ready data processing and Large Language Model (LLM) workflows. It provides a focused set of powerful tools designed to solve common but complex problems in preparing, processing, and orchestrating LLM-centric tasks.
 
 It is unopinionated and designed to be composed into any existing application.
 
-## Why Use `@jasonnathan/llm-core`?
+## Why Use `llm-core`?
 
-While many libraries can connect to LLM APIs, `@jasonnathan/llm-core` excels by providing solutions for the practical, real-world challenges that arise when building serious applications.
+While many libraries can connect to LLM APIs, `llm-core` excels by providing solutions for the practical, real-world challenges that arise when building serious applications.
 
 -   **Advanced Semantic Chunking**: Most libraries offer basic, fixed-size or recursive chunking. The `CosineDropChunker` is a significant step up, using semantic understanding to split content at natural topic boundaries. This is crucial for creating high-quality, contextually-aware chunks for Retrieval-Augmented Generation (RAG) systems, leading to more accurate results.
 
