@@ -27,7 +27,7 @@ export function convertHtmlToPlainText(input: string): string {
     try {
       const doc = parseDocument(html);
       return doc.children.some(
-        (node) => node.type === "tag" && node.name !== "html", // Ensure meaningful HTML tags
+        (node) => node.type === "tag" && node.name !== "html" // Ensure meaningful HTML tags
       );
     } catch {
       return false;
@@ -98,7 +98,7 @@ export function saveJsonl(
   directory: string,
   filename: string,
   items: unknown[],
-  logger: ILogger,
+  logger: ILogger
 ): void {
   let outputFile = filename.endsWith(".jsonl") ? filename : `${filename}.jsonl`;
   outputFile = directory ? join(directory, outputFile) : outputFile;
@@ -119,14 +119,14 @@ export function saveJsonl(
  */
 export function getDirContents(
   directory: string,
-  extensions: string[] = [],
+  extensions: string[] = []
 ): string[] {
   const files = readdirSync(directory);
   return files
     .filter(
       (file) =>
         !extensions.length ||
-        extensions.some((ext) => file.toLowerCase().endsWith(ext)),
+        extensions.some((ext) => file.toLowerCase().endsWith(ext))
     )
     .map((file) => join(directory, file));
 }
@@ -184,14 +184,14 @@ export function getQaPath(filePath: string, extension: string): string {
 
 export function convertJsonToJsonl(
   jsonPath: string,
-  jsonlPath: string,
+  jsonlPath: string
 ): unknown[] {
   const content = readFileSync(jsonPath, "utf-8");
   const items = JSON.parse(content);
 
-  const output = items.map((item: Record<string, unknown>) =>
-    JSON.stringify(item)
-  ).join("\n");
+  const output = items
+    .map((item: Record<string, unknown>) => JSON.stringify(item))
+    .join("\n");
   writeFileSync(jsonlPath, output, "utf-8");
   return items;
 }
@@ -220,7 +220,7 @@ export function readJsonlFile(filePath: string): unknown[] {
  */
 export function checkExistingQa(
   filePath: string,
-  requiredQuestions: number,
+  requiredQuestions: number
 ): unknown[] | null {
   const qaPaths = [
     { path: getQaPath(filePath, "jsonl"), isJsonl: true },
@@ -267,14 +267,14 @@ export function checkExistingQa(
  */
 export function getParsedOutputFiles(
   directory: string,
-  logger: ILogger,
+  logger: ILogger
 ): { fileName: string; jsonl: string }[] {
   const files = getDirContents(directory, ["md", "txt"]);
   const jsonlFiles = getDirContents(directory, ["jsonl"]);
 
   // Map JSONL files for quick lookup
   const jsonlFileMap = new Map<string, string>(
-    jsonlFiles.map((file) => [basename(file, ".md.jsonl"), file]),
+    jsonlFiles.map((file) => [basename(file, ".md.jsonl"), file])
   );
 
   // Pair content files with their associated JSONL files
@@ -289,12 +289,12 @@ export function getParsedOutputFiles(
 
       return { fileName, jsonl };
     })
-    .filter((entry): entry is { fileName: string; jsonl: string } =>
-      entry !== null
+    .filter(
+      (entry): entry is { fileName: string; jsonl: string } => entry !== null
     );
 
   logger.impt(
-    `Found ${results.length} content files with associated JSONL files in directory: ${directory}`,
+    `Found ${results.length} content files with associated JSONL files in directory: ${directory}`
   );
 
   return results;
@@ -337,7 +337,7 @@ export function getParsedOutputFiles(
  */
 export function processParsedFiles<T>(
   directory: string,
-  logger: ILogger,
+  logger: ILogger
 ): { identifier: string; content: string; jsonData: T[] }[] {
   // Step 1: Get parsed output files
   const parsedFiles = getParsedOutputFiles(directory, logger);
@@ -379,28 +379,29 @@ export function removeFile(filePath: string, logger: ILogger): boolean {
  * @returns A FormData object with the 'purpose' and 'file' fields set.
  */
 export function prepareFormData(filePath: string): FormData {
-  const formData = new globalThis.FormData(); // ✅ Use native FormData
-
-  // Append purpose and file stream.
+  const formData = new globalThis.FormData();
   formData.append("purpose", "batch");
 
-  // Use appropriate file handling per runtime
   if (typeof Bun !== "undefined") {
-    formData.append("file", Bun.file(filePath)); // ✅ Bun's built-in file API
-    //@ts-expect-error
-  } else if (typeof Deno !== "undefined") {
-    //@ts-expect-error
-    formData.append("file", Deno.readFileSync(filePath)); // ✅ Deno's file handling
-  } else if (typeof process !== "undefined") {
-    const { createReadStream } = require("fs");
-    formData.append("file", createReadStream(filePath)); // ✅ Node.js compatible
-  } else {
-    throw new Error("Unsupported runtime for file uploads");
+    formData.append("file", Bun.file(filePath));
+    return formData;
   }
 
-  return formData;
-}
+  //@ts-expect-error
+  if (typeof Deno !== "undefined") {
+    //@ts-expect-error
+    formData.append("file", Deno.readFileSync(filePath));
+    return formData;
+  }
 
+  if (typeof process !== "undefined") {
+    const { createReadStream } = require("fs");
+    formData.append("file", createReadStream(filePath));
+    return formData;
+  }
+
+  throw new Error("Unsupported runtime for file uploads");
+}
 
 /**
  * Fetches JSON data from a specified URL.
@@ -418,12 +419,12 @@ export function prepareFormData(filePath: string): FormData {
 
 export async function fetchJson<T>(
   url: string,
-  options: RequestInit,
+  options: RequestInit
 ): Promise<T> {
   const res = await fetch(url, options);
   if (!res.ok) {
     throw new Error(
-      `Fetch failed with status ${res.status}: ${res.statusText}`,
+      `Fetch failed with status ${res.status}: ${res.statusText}`
     );
   }
 

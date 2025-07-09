@@ -3,11 +3,12 @@ import {
   markdownSplitter,
   groupMarkdownSegmentsByHeadings,
   enforceChunkSizeBounds,
+  extractText,
   type MarkdownChunk,
   type MarkdownSegment,
 } from "../core/markdown-splitter.ts";
 
-const fixturePath = new URL("../../data/md-doc.md", import.meta.url);
+const fixturePath = new URL("./fixtures/md-doc.md", import.meta.url);
 describe("Markdown Splitter", () => {
   let mdDoc: string;
   let chunks: string[];
@@ -97,29 +98,47 @@ describe("Markdown Splitter", () => {
     expect(htmlCode).toBeDefined();
   });
 
-  // test("should include markdown table header separator", () => {
-  //   const tableChunk = chunks.find((c) =>
-  //     c.includes("| --- |") && c.includes("password_hash")
-  //   );
-  //   expect(tableChunk).toBeDefined();
-  // });
+  test("should return heading-grouped chunks when useHeadingsOnly is true", () => {
+    const simpleMd = `
+# A
+Para 1.
+
+# B
+Para 2.
+  `;
+
+    const result = markdownSplitter(simpleMd, {
+      minChunkSize: 5,
+      maxChunkSize: 1000,
+      useHeadingsOnly: true,
+    });
+
+    // Result should be plain strings
+    expect(Array.isArray(result)).toBe(true);
+    expect(typeof result[0]).toBe("string");
+    expect(result.length).toBe(2);
+
+    expect(result[0]).toContain("Para 1.");
+    expect(result[1]).toContain("Para 2.");
+  });
 
   test("should not include heading levels greater than 6 as headers", () => {
     const tooDeep = chunks.find((c) => c.startsWith("#######"));
     expect(tooDeep).toBeUndefined();
   });
 
-  // test("should convert h5 and h6 headings to bold text", () => {
-  //   const h5 = chunks.find((c) => c.includes("**This H5 should be considered too deep**"));
-  //   const h6 = chunks.find((c) => c.includes("**This H6 should be preserved**"));
-  //   expect(h5).toBeDefined();
-  //   expect(h6).toBeDefined();
-  // });
+  test("merges short heading chunk forward into next chunk", () => {
+    const chunks: MarkdownChunk[] = [
+      { text: "# Tiny Heading", headerPath: ["A"] },
+      { text: "Next content here", headerPath: ["A"] },
+    ];
 
-  // test("should capture valid depth 4 heading", () => {
-  //   const validH4 = chunks.find((c) => c.includes("#### This H4 is perfectly valid"));
-  //   expect(validH4).toBeDefined();
-  // });
+    const result = enforceChunkSizeBounds(chunks, 30, 1000);
+
+    expect(result.length).toBe(1);
+    expect(result[0].text).toContain("# Tiny Heading");
+    expect(result[0].text).toContain("Next content here");
+  });
 
   test("should wrap code blocks in triple backticks", () => {
     const code = chunks.find(
@@ -206,7 +225,7 @@ describe("groupMarkdownSegmentsByHeadings", () => {
     expect(chunks[0].text).toBe("One"); // or whatever logic applies to empty heading blocks
 
     expect(chunks[1].headerPath).toEqual(["Two"]);
-    expect(chunks[1].text).toBe("Two\n\nHi");;
+    expect(chunks[1].text).toBe("Two\n\nHi");
   });
 });
 
@@ -287,5 +306,183 @@ describe("enforceChunkSizeBounds", () => {
     const final = enforceChunkSizeBounds(chunks, 10, 2000);
     expect(final.length).toBe(1);
     expect(final[0].text.length).toBe(2000);
+  });
+});
+
+describe("extractText", () => {
+  test("extracts text from a simple text node", () => {
+    const node = { type: "text", value: "Hello World" };
+    expect(extractText(node)).toBe("Hello World");
+  });
+
+  test("extracts inlineCode", () => {
+    const node = { type: "inlineCode", value: "code()" };
+    expect(extractText(node)).toBe("`code()`");
+  });
+
+  test("extracts from emphasis and strong with children", () => {
+    const node = {
+      type: "strong",
+      children: [
+        { type: "text", value: "Bold" },
+        { type: "emphasis", children: [{ type: "text", value: "Italic" }] },
+      ],
+    };
+    expect(extractText(node)).toBe("**Bold*Italic***");
+  });
+
+  test("returns heading with direct children when text is present", () => {
+    const heading = {
+      type: "heading",
+      depth: 2,
+      children: [{ type: "text", value: "Title" }],
+    };
+    expect(extractText(heading)).toBe("## Title");
+  });
+
+  test("recovers fallback paragraph if heading has no text", () => {
+    const paragraph = {
+      type: "paragraph",
+      children: [{ type: "text", value: "Recovered from sibling" }],
+    };
+
+    const heading = {
+      type: "heading",
+      depth: 2,
+      children: [],
+      position: {
+        parent: {
+          children: [] as any[],
+        },
+      },
+    } as any;
+
+    heading.position.parent.children = [heading, paragraph];
+
+    const result = extractText(heading);
+    expect(result).toBe("## Recovered from sibling");
+    expect(heading.position.parent.children).toEqual([heading]);
+  });
+
+  test("recovers fallback text using hash formatting when heading level is 3", () => {
+    const paragraph = {
+      type: "paragraph",
+      children: [{ type: "text", value: "Recovered Content" }],
+    };
+
+    const heading = {
+      type: "heading",
+      depth: 3,
+      children: [],
+      position: {
+        parent: {
+          children: [] as any[],
+        },
+      },
+    } as any;
+
+    heading.position.parent.children = [heading, paragraph];
+
+    const result = extractText(heading);
+    expect(result).toBe("### Recovered Content");
+    expect(heading.position.parent.children).toEqual([heading]);
+  });
+
+  test("recovers fallback text using bold formatting when heading level is 6", () => {
+    const paragraph = {
+      type: "paragraph",
+      children: [{ type: "text", value: "Deep Content" }],
+    };
+
+    const heading = {
+      type: "heading",
+      depth: 6,
+      children: [],
+      position: {
+        parent: {
+          children: [] as any[],
+        },
+      },
+    } as any;
+
+    heading.position.parent.children = [heading, paragraph];
+
+    const result = extractText(heading);
+    expect(result).toBe("**Deep Content**\n");
+    expect(heading.position.parent.children).toEqual([heading]);
+  });
+
+  test("returns '** **' for heading with no text or fallback", () => {
+    const heading = {
+      type: "heading",
+      depth: 5,
+      children: [],
+      position: {
+        parent: {
+          children: [],
+        },
+      },
+    } as any;
+
+    const result = extractText(heading);
+    expect(result).toBe("** **");
+  });
+
+  test("extracts from paragraph/listItem/blockquote recursively", () => {
+    const node = {
+      type: "paragraph",
+      children: [
+        { type: "text", value: "Start " },
+        {
+          type: "strong",
+          children: [{ type: "text", value: "Bold" }],
+        },
+      ],
+    };
+
+    expect(extractText(node)).toBe("Start **Bold**");
+  });
+
+  test("falls back to default recursive for unknown nodes", () => {
+    const node = {
+      type: "customNode",
+      children: [
+        { type: "text", value: "X" },
+        { type: "text", value: "Y" },
+      ],
+    };
+
+    expect(extractText(node)).toBe("XY");
+  });
+
+  test("returns empty string for unknown node without children", () => {
+    const node = { type: "weirdNode" };
+    expect(extractText(node)).toBe("");
+  });
+
+  test("fallback paragraph exists but contains no text should not return early", () => {
+    const paragraph = {
+      type: "paragraph",
+      children: [{ type: "text", value: "" }],
+    };
+
+    const heading = {
+      type: "heading",
+      depth: 6,
+      children: [],
+      position: {
+        parent: {
+          children: [],
+        },
+      },
+    } as any;
+
+    heading.position.parent.children = [heading, paragraph];
+
+    const result = extractText(heading);
+
+    // Should fall through to default "** **"
+    expect(result).toBe("** **");
+    expect(heading.position.parent.children).toEqual([heading, paragraph]); // not spliced
   });
 });

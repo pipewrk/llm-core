@@ -1,9 +1,5 @@
 import { withLogger } from "./decorators.ts";
-import {
-  ensureDirectory,
-  prepareFormData,
-  saveJsonl,
-} from "./file-utils.ts";
+import { ensureDirectory, prepareFormData, saveJsonl } from "./file-utils.ts";
 import type {
   BatchLLMService,
   BatchRequest,
@@ -56,9 +52,8 @@ export class OpenAIBatchService implements BatchLLMService {
         response_format: {
           type: "json_schema",
           json_schema: {
-            name: typeof schema_name === "string"
-              ? schema_name
-              : "response_schema",
+            name:
+              typeof schema_name === "string" ? schema_name : "response_schema",
             strict: true,
             schema,
           },
@@ -94,7 +89,7 @@ export class OpenAIBatchService implements BatchLLMService {
 
   async pollBatch<T>(
     batchId: string,
-    customIds: string[],
+    customIds: string[]
   ): Promise<Record<string, T>> {
     const pollingInterval = 10000; // 10 seconds
     const maxAttempts = 144; // roughly 24 hours if needed
@@ -129,7 +124,7 @@ export class OpenAIBatchService implements BatchLLMService {
       }
 
       console.info(
-        `Batch ${batchId} status: ${batchStatus} (Attempt ${attempts + 1})`,
+        `Batch ${batchId} status: ${batchStatus} (Attempt ${attempts + 1})`
       );
       attempts++;
       await this.sleep(pollingInterval);
@@ -139,22 +134,22 @@ export class OpenAIBatchService implements BatchLLMService {
 
   private async uploadFile(filePath: string): Promise<string> {
     let formData = prepareFormData(filePath);
-    const response = await uFetch(`${this.endpoint}/v1/files`, { // ✅ Forces TS to use global fetch
+    const response = await uFetch(`${this.endpoint}/v1/files`, {
+      // ✅ Forces TS to use global fetch
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: formData
+      body: formData,
     });
-  
+
     if (!response.ok) {
       throw new Error(`File upload failed with status ${response.status}`);
     }
-  
+
     const data = (await response.json()) as unknown as BatchResponse;
     return data.id;
   }
-  
 
   private async createBatch(inputFileId: string): Promise<string> {
     const payload = {
@@ -182,7 +177,7 @@ export class OpenAIBatchService implements BatchLLMService {
 
   private async fetchBatchResults<T>(
     outputFileId: string,
-    customIds: string[],
+    customIds: string[]
   ): Promise<Record<string, T>> {
     const response = await fetch(
       `${this.endpoint}/v1/files/${outputFileId}/content`,
@@ -191,12 +186,12 @@ export class OpenAIBatchService implements BatchLLMService {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
         },
-      },
+      }
     );
 
     if (!response.ok) {
       throw new Error(
-        `Failed to fetch batch results with status ${response.status}`,
+        `Failed to fetch batch results with status ${response.status}`
       );
     }
 
@@ -204,18 +199,22 @@ export class OpenAIBatchService implements BatchLLMService {
     const results: Record<string, T> = {};
 
     content.split("\n").forEach((line: string) => {
-      if (line.trim()) {
-        try {
-          const entry = JSON.parse(line);
-          const { custom_id, response: batchResponse, error } = entry;
-          if (error) {
-            console.error(`Error in batch response for ${custom_id}:`, error);
-          } else if (customIds.includes(custom_id)) {
-            results[custom_id] = batchResponse?.body;
-          }
-        } catch (err) {
-          console.error("Failed to parse batch response line:", line, err);
+      if (!line.trim()) return;
+
+      try {
+        const entry = JSON.parse(line);
+        const { custom_id, response: batchResponse, error } = entry;
+
+        if (error) {
+          console.error(`Error in batch response for ${custom_id}:`, error);
+          return;
         }
+
+        if (customIds.includes(custom_id)) {
+          results[custom_id] = batchResponse?.body;
+        }
+      } catch (err) {
+        console.error("Failed to parse batch response line:", line, err);
       }
     });
     return results;

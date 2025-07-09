@@ -180,27 +180,4 @@ export class CosineDropChunker implements TextChunker {
       .map((node) => node.raw.trim())
       .filter((s) => s.length > 0);
   }
-  private static shouldSplitHere({
-    dist,
-    threshold,
-    currentIdx,
-    bufferSize,
-    segments,
-  }: {
-    dist: number;
-    threshold: number;
-    currentIdx: number;
-    bufferSize: number;
-    segments: string[];
-  }): boolean {
-    if (isNaN(dist)) return false;
-
-    const next = segments[currentIdx + bufferSize]?.trim();
-    const isNextHeading = next?.startsWith("#");
-
-    // Strong semantic boundaries always split
-    if (isNextHeading) return true;
-
-    return dist >= threshold;
-  }
 }

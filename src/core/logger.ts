@@ -76,13 +76,15 @@ export class Logger implements ILogger {
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.printf(
-          (
-            { level, message, timestamp }: winston.Logform.TransformableInfo,
-          ) => {
+          ({
+            level,
+            message,
+            timestamp,
+          }: winston.Logform.TransformableInfo) => {
             const formattedMessage = this.formatForPlainTransport(message);
             return `${timestamp} **[${level.toUpperCase()}]** ${formattedMessage}`;
-          },
-        ),
+          }
+        )
       ),
     });
 
@@ -98,10 +100,10 @@ export class Logger implements ILogger {
           const plainMessage = this.stripConsoleFormatting(
             typeof message === "string"
               ? message
-              : JSON.stringify(message, null, 2),
+              : JSON.stringify(message, null, 2)
           );
           return `${colourFn(`[${level.toUpperCase()}]`)} ${plainMessage}`;
-        },
+        }
       ),
     });
 
@@ -109,23 +111,6 @@ export class Logger implements ILogger {
       levels: logLevels.levels,
       transports: [markdownTransport, consoleTransport],
     });
-
-    // Initialize the batch timer if Ntfy is enabled
-    // if (this.ntfyServerUrl) {
-    //   this.startBatchTimer();
-    //   // Handle graceful shutdown to flush remaining messages
-    //   process.on('beforeExit', () => {
-    //     this.flushQueueSync();
-    //   });
-    //   process.on('SIGINT', () => {
-    //     this.flushQueueSync();
-    //     process.exit();
-    //   });
-    //   process.on('SIGTERM', () => {
-    //     this.flushQueueSync();
-    //     process.exit();
-    //   });
-    // }
   }
 
   attn(...args: unknown[]): void {
@@ -160,9 +145,9 @@ export class Logger implements ILogger {
     const message = this.stringifyMessage(args);
     this.logger.log({ level, message });
 
-    // if (this.ntfyServerUrl) {
-    //   this.enqueueMessage(level, message);
-    // }
+    if (this.ntfyServerUrl) {
+      this.enqueueMessage(level, message);
+    }
   }
 
   /**
@@ -189,14 +174,14 @@ export class Logger implements ILogger {
    *
    * @see {@link flushQueueSync} for immediate sending of all messages.
    */
-  private startBatchTimer(): void {
+  private startBatchTimer(customInterval?: number): void {
+    const interval = customInterval ?? this.batchInterval;
     this.batchTimer = setInterval(() => {
       if (this.messageQueue.length > 0) {
         this.flushQueue();
       }
-    }, this.batchInterval);
+    }, interval);
   }
-
   /**
    * Sends the current batch of messages to Ntfy.
    *
@@ -218,7 +203,7 @@ export class Logger implements ILogger {
     } catch (err) {
       // Log the error without causing recursion
       this.logger.error(
-        `Failed to send batched logs to Ntfy: ${(err as Error).message}`,
+        `Failed to send batched logs to Ntfy: ${(err as Error).message}`
       );
     }
   }
@@ -247,12 +232,12 @@ export class Logger implements ILogger {
 
       if (!response.ok) {
         this.logger.error(
-          `HTTP Error when sending batched logs to Ntfy: ${response.statusText}`,
+          `HTTP Error when sending batched logs to Ntfy: ${response.statusText}`
         );
       }
     } catch (err) {
       this.logger.error(
-        `Failed to send batched logs to Ntfy: ${(err as Error).message}`,
+        `Failed to send batched logs to Ntfy: ${(err as Error).message}`
       );
     }
   }
@@ -270,7 +255,7 @@ export class Logger implements ILogger {
     return message.replace(
       // deno-lint-ignore no-control-regex
       /[\u001b\u009b][[()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])*[m]/g,
-      "",
+      ""
     );
   }
 
@@ -298,9 +283,9 @@ export class Logger implements ILogger {
 
   private stringifyMessage(args: unknown[]): string {
     return args
-      .map((
-        arg,
-      ) => (typeof arg === "string" ? arg : JSON.stringify(arg, null, 2)))
+      .map((arg) =>
+        typeof arg === "string" ? arg : JSON.stringify(arg, null, 2)
+      )
       .join(" ");
   }
 
@@ -322,7 +307,7 @@ export class Logger implements ILogger {
       }
     } catch (err) {
       throw new Error(
-        `Failed to send batched log to Ntfy: ${(err as Error).message}`,
+        `Failed to send batched log to Ntfy: ${(err as Error).message}`
       );
     }
   }

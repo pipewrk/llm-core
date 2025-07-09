@@ -5,7 +5,6 @@ import {
   type EmbedFunction,
 } from "../core/chunker.ts";
 import { MockLogger } from "./logger.mock.ts";
-import type { MarkdownChunk } from "../core/markdown-splitter.ts";
 
 // Tests for chunkText
 
@@ -80,7 +79,7 @@ describe("CosineDropChunker with real-world text", () => {
   let raw: string;
   const logger = new MockLogger();
   const fixtureURL = new URL(
-    "../../data/pride-and-prejudice.txt",
+    "./fixtures/who-sea.txt",
     import.meta.url
   );
 

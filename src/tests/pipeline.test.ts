@@ -100,6 +100,66 @@ describe("Generic Pipeline Tests", () => {
     expect(result.data).toBe("Hello World");
     expect(logger.logs.info).toContain('Appending " World" to data.');
   });
-
-  // Additional tests can be added here as needed
 });
+describe("addMultiStrategyStep", () => {
+  const logger = new MockLogger();
+  beforeEach(() => {
+    logger.clear();
+    setEnv("LOG_PATH", "./");
+  });
+
+  it("should run all sub-steps when no stopCondition is provided", async () => {
+    const initialData = { data: "Hi" };
+
+    const testPipeline = pipeline<{ data: string }>(logger).addMultiStrategyStep([
+      appendStep(", John"),
+      uppercaseStep,
+    ]);
+
+    const result = await testPipeline.run(initialData);
+
+    expect(result.data).toBe("HI, JOHN");
+    expect(logger.logs.info).toContain("--- Running multi-strategy sub-step #1 ---");
+    expect(logger.logs.info).toContain("--- Running multi-strategy sub-step #2 ---");
+    expect(logger.logs.impt.length).toBe(0); // no short-circuit
+  });
+
+  it("should short-circuit when stopCondition returns true", async () => {
+    const initialData = { data: "Hello" };
+
+    const stopAfterUppercase = (doc: { data: string }) =>
+      doc.data.includes("WORLD");
+
+    const testPipeline = pipeline<{ data: string }>(logger).addMultiStrategyStep(
+      [
+        appendStep(" World"),
+        uppercaseStep,
+        appendStep(" Again"), // should be skipped
+      ],
+      stopAfterUppercase,
+    );
+
+    const result = await testPipeline.run(initialData);
+
+    expect(result.data).toBe("HELLO WORLD");
+    expect(logger.logs.info).toContain("--- Running multi-strategy sub-step #1 ---");
+    expect(logger.logs.info).toContain("--- Running multi-strategy sub-step #2 ---");
+    expect(logger.logs.info).not.toContain("--- Running multi-strategy sub-step #3 ---");
+    expect(logger.logs.impt).toContain(
+      "Short-circuited in multi-strategy after sub-step #2",
+    );
+  });
+
+  it("should support chaining after addMultiStrategyStep", async () => {
+    const initialData = { data: "Hi" };
+
+    const testPipeline = pipeline<{ data: string }>(logger)
+      .addMultiStrategyStep([appendStep(" there")])
+      .addStep(uppercaseStep);
+
+    const result = await testPipeline.run(initialData);
+
+    expect(result.data).toBe("HI THERE");
+  });
+});
+

@@ -179,6 +179,7 @@ export function enforceChunkSizeBounds(
     const curr = chunks[i];
     const text = curr.text.trim();
 
+    // Case 1: Too long — split into chunks
     if (text.length >= maxSize) {
       for (let j = 0; j < text.length; j += maxSize) {
         final.push({
@@ -186,113 +187,51 @@ export function enforceChunkSizeBounds(
           headerPath: [...curr.headerPath],
         });
       }
-    } else if (text.length < minSize) {
+      continue;
+    }
+
+    // Case 2: Too short — try to merge
+    if (text.length < minSize) {
       const prev = final.at(-1);
       const next = chunks[i + 1];
 
-      if (curr.text.startsWith("#") && next) {
-        // Always merge short headings FORWARD only
+      const sameHeaderAs = (a?: MarkdownChunk, b?: MarkdownChunk) =>
+        a?.headerPath.join("/") === b?.headerPath.join("/");
+
+      const isHeading = curr.text.startsWith("#");
+
+      const canMergeForward = isHeading && next;
+      const canMergeBack = prev && sameHeaderAs(prev, curr);
+      const canMergeNext = next && sameHeaderAs(next, curr);
+
+      if (canMergeForward) {
         next.text = curr.text + "\n\n" + next.text;
-      } else if (
-        prev &&
-        prev.headerPath.join("/") === curr.headerPath.join("/")
-      ) {
-        prev.text += "\n\n" + text;
-      } else if (
-        next &&
-        next.headerPath.join("/") === curr.headerPath.join("/")
-      ) {
-        next.text = text + "\n\n" + next.text;
-      } else {
-        final.push({ text, headerPath: [...curr.headerPath] });
+        continue;
       }
-    } else {
+
+      if (canMergeBack) {
+        prev.text += "\n\n" + text;
+        continue;
+      }
+
+      if (canMergeNext) {
+        next.text = text + "\n\n" + next.text;
+        continue;
+      }
+
+      // Fallback: push as-is
       final.push({ text, headerPath: [...curr.headerPath] });
+      continue;
     }
+
+    // Case 3: In bounds — use directly
+    final.push({ text, headerPath: [...curr.headerPath] });
   }
 
   return final;
 }
 
-
-
-export function _enforceChunkSizeBounds(
-  chunks: MarkdownChunk[],
-  minSize: number,
-  maxSize: number
-): MarkdownChunk[] {
-  const final: MarkdownChunk[] = [];
-
-  for (let i = 0; i < chunks.length; i++) {
-    const curr = chunks[i];
-    const text = curr.text.trim();
-
-    if (text.length >= maxSize) {
-      for (let j = 0; j < text.length; j += maxSize) {
-        final.push({
-          text: text.slice(j, j + maxSize),
-          headerPath: [...curr.headerPath],
-        });
-      }
-    } else if (text.length < minSize) {
-      const prev = final.at(-1);
-      const next = chunks[i + 1];
-
-      if (prev && prev.headerPath.join("/") === curr.headerPath.join("/")) {
-        prev.text += "\n\n" + text;
-      } else if (
-        next &&
-        next.headerPath.join("/") === curr.headerPath.join("/")
-      ) {
-        next.text = text + "\n\n" + next.text;
-      } else {
-        final.push({ text, headerPath: [...curr.headerPath] });
-      }
-    } else {
-      final.push({ text, headerPath: [...curr.headerPath] });
-    }
-  }
-
-  return final;
-}
-
-function _extractText(node: any): string {
-  if (!node) return "";
-
-  switch (node.type) {
-    case "text":
-      return node.value;
-
-    case "inlineCode":
-      return `\`${node.value}\``;
-
-    case "emphasis":
-      return `*${(node.children ?? []).map(extractText).join("")}*`;
-
-    case "strong":
-      return `**${(node.children ?? []).map(extractText).join("")}**`;
-
-    case "heading": {
-      const text = (node.children ?? []).map(extractText).join("");
-      const level = node.depth;
-      if (level <= 4) return `${"#".repeat(level)} ${text}`;
-      return `**${text}**`; // h5/h6 as bold
-    }
-
-    case "paragraph":
-    case "listItem":
-    case "blockquote":
-      return (node.children ?? []).map(extractText).join("");
-
-    default:
-      if (Array.isArray(node.children)) {
-        return node.children.map(extractText).join("");
-      }
-      return "";
-  }
-}
-
-function extractText(node: any): string {
+export function extractText(node: any): string {
   if (!node) return "";
 
   switch (node.type) {
@@ -395,15 +334,20 @@ export function mergeTinyMarkdownSegments(
 
   for (const seg of segments) {
     const prev = merged[merged.length - 1];
-    if (
+
+    const canMerge =
       seg.text.length < minLength &&
       prev &&
       prev.type !== "heading" &&
       seg.type !== "heading" &&
-      prev.headerPath.join("/") === seg.headerPath.join("/")
-    ) {
+      prev.headerPath.join("/") === seg.headerPath.join("/");
+
+    if (canMerge) {
       prev.text += "\n\n" + seg.text;
-    } else if (seg.text.trim()) {
+      continue;
+    }
+
+    if (seg.text.trim()) {
       merged.push({ ...seg });
     }
   }

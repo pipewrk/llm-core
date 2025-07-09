@@ -16,6 +16,16 @@ export class MockLogger implements ILogger {
     error: [],
   };
 
+  constructor() {
+    this.logs = {
+      attn: [],
+      impt: [],
+      info: [],
+      warn: [],
+      error: [],
+    };
+  }
+
   /**
    * Clears all captured log messages.
    */
@@ -73,9 +83,9 @@ export class MockLogger implements ILogger {
    */
   private formatArgs(args: unknown[]): string {
     return args
-      .map((
-        arg,
-      ) => (typeof arg === "string" ? arg : JSON.stringify(arg, null, 2)))
+      .map((arg) =>
+        typeof arg === "string" ? arg : JSON.stringify(arg, null, 2)
+      )
       .join(" ");
   }
 }

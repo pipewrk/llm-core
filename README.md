@@ -14,7 +14,7 @@ While many libraries can connect to LLM APIs, `@jasonnathan/llm-core` excels by 
 
 -   **Robust Local LLM Integration**: The `OllamaService` is more than just a basic API client. It includes first-class support for structured JSON output, response sanitization, and custom validation, making it easy to get reliable, machine-readable data from local models.
 
--   **Modular and Unopinionated**: This library is not a monolithic framework. It's a toolkit. You can pick and choose the components you need—the chunker, the pipeline, the services—and integrate them into your existing application without being forced into a specific architecture.
+-   **Modular and Unopinionated**: This library is not a monolithic framework. It's a toolkit. You can pick and choose the components you need - the chunker, the pipeline, the services - and integrate them into your existing application without being forced into a specific architecture.
 
 ## Features
 
