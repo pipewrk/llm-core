@@ -22,12 +22,9 @@
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jasonnathan/llm-core.git"
+    "url": "git+https://github.com/jasonnathan/llm-core.git"
   },
   "devDependencies": {
     "@swc/core": "^1.12.7",
