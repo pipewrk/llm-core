@@ -4,8 +4,7 @@ The `OllamaService` is a robust client for interacting with the [Ollama](https:/
 
 It is designed to be used with models that support JSON output and instruction following.
 
-<details>
-<summary>Typed JSON Responses via LLM Visual Flow</summary>
+## Typed JSON Responses via LLM Visual Flow
 
 ```mermaid
 sequenceDiagram
@@ -28,8 +27,6 @@ sequenceDiagram
     end
 
 ```
-
-</details>
 
 ## Core Concepts
 
