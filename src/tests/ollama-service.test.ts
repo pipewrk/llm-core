@@ -172,21 +172,20 @@ describe("OllamaService", () => {
 
   test("embedTexts retries on failure then succeeds", async () => {
     let callCount = 0;
-    global.fetch = (() => {
-      return mock().mockImplementation(() => {
-        callCount++;
-        if (callCount < 2) {
-          return Promise.resolve({
-            ok: false,
-            text: () => Promise.resolve("error"),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          text: () => Promise.resolve(JSON.stringify({ embedding: [0.5] })),
-        });
-      });
-    })() as unknown as typeof fetch;
+
+    global.fetch = mock().mockImplementation(() => {
+      callCount++;
+
+      const payload = {
+        ok: callCount >= 2,
+        text: () =>
+          Promise.resolve(
+            callCount < 2 ? "error" : JSON.stringify({ embedding: [0.5] }) // Explicit correct structure
+          ),
+      };
+
+      return Promise.resolve(payload);
+    }) as unknown as typeof fetch;
 
     const service = new OllamaService(model, endpoint);
     const result = await service.embedTexts(["foo"]);

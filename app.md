@@ -45,3 +45,123 @@
 2025-07-09T12:17:33.472Z **[ERROR]** Attempt 2 failed: Response failed custom check
 2025-07-09T12:17:34.474Z **[INFO]** Sending request to OpenAI (attempt 3/3)...
 2025-07-09T12:17:34.475Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T12:38:02.476Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T12:38:02.478Z **[INFO]** Custom check result: false
+2025-07-09T12:38:02.479Z **[ERROR]** Response failed custom check
+2025-07-09T12:38:02.479Z **[ERROR]** Attempt 1 failed: Response failed custom check
+2025-07-09T12:38:03.480Z **[INFO]** Sending request to Ollama (attempt 2/3)...
+2025-07-09T12:38:03.481Z **[INFO]** Custom check result: false
+2025-07-09T12:38:03.481Z **[ERROR]** Response failed custom check
+2025-07-09T12:38:03.481Z **[ERROR]** Attempt 2 failed: Response failed custom check
+2025-07-09T12:38:04.482Z **[INFO]** Sending request to Ollama (attempt 3/3)...
+2025-07-09T12:38:04.483Z **[INFO]** Custom check result: false
+2025-07-09T12:38:04.484Z **[ERROR]** Response failed custom check
+2025-07-09T12:38:04.485Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T12:38:04.487Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T12:38:04.487Z **[INFO]** Custom check result: {"key":"valid"}
+2025-07-09T12:38:04.487Z **[INFO]** Custom check passed, returning
+2025-07-09T12:38:04.489Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T12:38:04.489Z **[INFO]** Custom check result: false
+2025-07-09T12:38:04.489Z **[ERROR]** Response failed custom check
+2025-07-09T12:38:04.490Z **[ERROR]** Attempt 1 failed: Response failed custom check
+2025-07-09T12:38:05.491Z **[INFO]** Sending request to Ollama (attempt 2/3)...
+2025-07-09T12:38:05.492Z **[INFO]** Custom check result: false
+2025-07-09T12:38:05.493Z **[ERROR]** Response failed custom check
+2025-07-09T12:38:05.493Z **[ERROR]** Attempt 2 failed: Response failed custom check
+2025-07-09T12:38:06.495Z **[INFO]** Sending request to Ollama (attempt 3/3)...
+2025-07-09T12:38:06.495Z **[INFO]** Custom check result: false
+2025-07-09T12:38:06.495Z **[ERROR]** Response failed custom check
+2025-07-09T12:38:06.495Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T12:38:06.497Z **[INFO]** Embedding request to Ollama for prompt "hello..." (attempt 1/3)
+2025-07-09T12:38:06.497Z **[INFO]** Embedding request to Ollama for prompt "world..." (attempt 1/3)
+2025-07-09T12:38:06.498Z **[INFO]** Embedding request to Ollama for prompt "foo..." (attempt 1/3)
+2025-07-09T12:38:06.499Z **[ERROR]** Failed to send batched logs to Ntfy: Failed to send batched log to Ntfy: HTTP Error: undefined
+2025-07-09T12:38:06.503Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 1/3)
+2025-07-09T12:38:06.504Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T12:38:06.504Z **[ERROR]** Embed attempt 1 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T12:38:07.505Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 2/3)
+2025-07-09T12:38:07.506Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T12:38:07.506Z **[ERROR]** Embed attempt 2 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T12:38:08.508Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 3/3)
+2025-07-09T12:38:08.508Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T12:38:08.508Z **[ERROR]** Embed attempt 3 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T13:02:47.873Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T13:02:47.876Z **[INFO]** Custom check result: false
+2025-07-09T13:02:47.876Z **[ERROR]** Response failed custom check
+2025-07-09T13:02:47.877Z **[ERROR]** Attempt 1 failed: Response failed custom check
+2025-07-09T13:02:48.878Z **[INFO]** Sending request to Ollama (attempt 2/3)...
+2025-07-09T13:02:48.879Z **[INFO]** Custom check result: false
+2025-07-09T13:02:48.879Z **[ERROR]** Response failed custom check
+2025-07-09T13:02:48.879Z **[ERROR]** Attempt 2 failed: Response failed custom check
+2025-07-09T13:02:49.881Z **[INFO]** Sending request to Ollama (attempt 3/3)...
+2025-07-09T13:02:49.881Z **[INFO]** Custom check result: false
+2025-07-09T13:02:49.882Z **[ERROR]** Response failed custom check
+2025-07-09T13:02:49.883Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T13:02:49.885Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T13:02:49.885Z **[INFO]** Custom check result: {"key":"valid"}
+2025-07-09T13:02:49.885Z **[INFO]** Custom check passed, returning
+2025-07-09T13:02:49.887Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T13:02:49.887Z **[INFO]** Custom check result: false
+2025-07-09T13:02:49.888Z **[ERROR]** Response failed custom check
+2025-07-09T13:02:49.888Z **[ERROR]** Attempt 1 failed: Response failed custom check
+2025-07-09T13:02:50.890Z **[INFO]** Sending request to Ollama (attempt 2/3)...
+2025-07-09T13:02:50.891Z **[INFO]** Custom check result: false
+2025-07-09T13:02:50.891Z **[ERROR]** Response failed custom check
+2025-07-09T13:02:50.891Z **[ERROR]** Attempt 2 failed: Response failed custom check
+2025-07-09T13:02:51.893Z **[INFO]** Sending request to Ollama (attempt 3/3)...
+2025-07-09T13:02:51.894Z **[INFO]** Custom check result: false
+2025-07-09T13:02:51.894Z **[ERROR]** Response failed custom check
+2025-07-09T13:02:51.894Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T13:02:51.896Z **[INFO]** Embedding request to Ollama for prompt "hello..." (attempt 1/3)
+2025-07-09T13:02:51.896Z **[INFO]** Embedding request to Ollama for prompt "world..." (attempt 1/3)
+2025-07-09T13:02:51.897Z **[INFO]** Embedding request to Ollama for prompt "foo..." (attempt 1/3)
+2025-07-09T13:02:51.897Z **[ERROR]** Failed to send batched logs to Ntfy: Failed to send batched log to Ntfy: HTTP Error: undefined
+2025-07-09T13:02:51.898Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 1/3)
+2025-07-09T13:02:51.898Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T13:02:51.899Z **[ERROR]** Embed attempt 1 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T13:02:52.901Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 2/3)
+2025-07-09T13:02:52.901Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T13:02:52.902Z **[ERROR]** Embed attempt 2 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T13:02:53.904Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 3/3)
+2025-07-09T13:02:53.904Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T13:02:53.904Z **[ERROR]** Embed attempt 3 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T14:01:42.071Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T14:01:42.072Z **[INFO]** Custom check result: false
+2025-07-09T14:01:42.072Z **[ERROR]** Response failed custom check
+2025-07-09T14:01:42.073Z **[ERROR]** Attempt 1 failed: Response failed custom check
+2025-07-09T14:01:43.074Z **[INFO]** Sending request to Ollama (attempt 2/3)...
+2025-07-09T14:01:43.074Z **[INFO]** Custom check result: false
+2025-07-09T14:01:43.074Z **[ERROR]** Response failed custom check
+2025-07-09T14:01:43.074Z **[ERROR]** Attempt 2 failed: Response failed custom check
+2025-07-09T14:01:44.076Z **[INFO]** Sending request to Ollama (attempt 3/3)...
+2025-07-09T14:01:44.077Z **[INFO]** Custom check result: false
+2025-07-09T14:01:44.078Z **[ERROR]** Response failed custom check
+2025-07-09T14:01:44.079Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T14:01:44.081Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T14:01:44.082Z **[INFO]** Custom check result: {"key":"valid"}
+2025-07-09T14:01:44.082Z **[INFO]** Custom check passed, returning
+2025-07-09T14:01:44.083Z **[INFO]** Sending request to Ollama (attempt 1/3)...
+2025-07-09T14:01:44.083Z **[INFO]** Custom check result: false
+2025-07-09T14:01:44.083Z **[ERROR]** Response failed custom check
+2025-07-09T14:01:44.084Z **[ERROR]** Attempt 1 failed: Response failed custom check
+2025-07-09T14:01:45.086Z **[INFO]** Sending request to Ollama (attempt 2/3)...
+2025-07-09T14:01:45.086Z **[INFO]** Custom check result: false
+2025-07-09T14:01:45.087Z **[ERROR]** Response failed custom check
+2025-07-09T14:01:45.087Z **[ERROR]** Attempt 2 failed: Response failed custom check
+2025-07-09T14:01:46.089Z **[INFO]** Sending request to Ollama (attempt 3/3)...
+2025-07-09T14:01:46.089Z **[INFO]** Custom check result: false
+2025-07-09T14:01:46.090Z **[ERROR]** Response failed custom check
+2025-07-09T14:01:46.090Z **[ERROR]** Attempt 3 failed: Response failed custom check
+2025-07-09T14:01:46.092Z **[INFO]** Embedding request to Ollama for prompt "hello..." (attempt 1/3)
+2025-07-09T14:01:46.092Z **[INFO]** Embedding request to Ollama for prompt "world..." (attempt 1/3)
+2025-07-09T14:01:46.093Z **[INFO]** Embedding request to Ollama for prompt "foo..." (attempt 1/3)
+2025-07-09T14:01:46.094Z **[ERROR]** Failed to send batched logs to Ntfy: Failed to send batched log to Ntfy: HTTP Error: undefined
+2025-07-09T14:01:46.095Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 1/3)
+2025-07-09T14:01:46.095Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T14:01:46.096Z **[ERROR]** Embed attempt 1 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T14:01:47.098Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 2/3)
+2025-07-09T14:01:47.099Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T14:01:47.100Z **[ERROR]** Embed attempt 2 for "test..." failed: Ollama embed failed with status undefined
+2025-07-09T14:01:48.101Z **[INFO]** Embedding request to Ollama for prompt "test..." (attempt 3/3)
+2025-07-09T14:01:48.102Z **[ERROR]** Embed API returned HTTP undefined: err
+2025-07-09T14:01:48.102Z **[ERROR]** Embed attempt 3 for "test..." failed: Ollama embed failed with status undefined

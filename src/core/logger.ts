@@ -1,6 +1,8 @@
 // File: src/logger.ts
 import winston from "winston";
 import chalk, { type ChalkInstance } from "chalk";
+import { dirname } from "path";
+import { existsSync, mkdirSync } from "fs";
 import type { ILogger } from "../types/dataset.ts";
 
 /**
@@ -48,6 +50,10 @@ export class Logger implements ILogger {
 
   constructor(logFilePath: string, ntfyServerUrl?: string) {
     this.ntfyServerUrl = ntfyServerUrl;
+    const logDir = dirname(logFilePath);
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
 
     // Define custom log levels and colors
     const logLevels = {
@@ -310,5 +316,21 @@ export class Logger implements ILogger {
         `Failed to send batched log to Ntfy: ${(err as Error).message}`
       );
     }
+  }
+
+  public async close(): Promise<void> {
+    const fileTransport = this.logger.transports.find(
+      (t) => t instanceof winston.transports.File
+    ) as winston.transports.FileTransportInstance | undefined;
+
+    if (!fileTransport) return;
+
+    const stream = (fileTransport as any)._stream;
+    if (!stream || typeof stream.end !== "function") return;
+
+    await new Promise<void>((resolve, reject) => {
+      stream.end(resolve);
+      stream.on("error", reject);
+    });
   }
 }
