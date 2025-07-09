@@ -32,5 +32,5 @@
     },
     "typeRoots": ["./src/types", "./node_modules/@types"]
   },
-  "include": ["src/core/*"]
+  "include": ["src/core/*", "src/tests"]
 }
