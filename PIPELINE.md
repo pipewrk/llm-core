@@ -4,8 +4,7 @@ The Pipeline module provides a powerful and flexible way to orchestrate complex,
 
 This is particularly useful for tasks that involve multiple transformations, external API calls (like to an LLM), and conditional logic.
 
-<details>
-<summary>Step-by-Step Data Transformation Visual Flow</summary>
+## Step-by-Step Data Transformation Visual Flow
 
 ```mermaid
 flowchart TD
@@ -19,8 +18,6 @@ flowchart TD
     end
 
 ```
-
-</details>
 
 ## Core Concepts
 
