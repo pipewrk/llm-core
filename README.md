@@ -14,12 +14,12 @@
     <a href="https://codecov.io/gh/jasonnathan/llm-core">
       <img alt="Code Coverage" src="https://codecov.io/gh/jasonnathan/llm-core/branch/main/graph/badge.svg" />
     </a>
-<a href="https://github.com/jasonnathan/llm-core/releases/latest">
-  <img
-    alt="npm version"
-    src="https://img.shields.io/github/v/release/jasonnathan/llm-core"
-  />
-</a>
+    <a href="https://www.npmjs.com/package/@jasonnathan/llm-core">
+      <img
+        alt="npm version"
+        src="https://img.shields.io/npm/v/@jasonnathan/llm-core.svg"
+      />
+    </a>
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Strict-blue?logo=typescript" />
     <img alt="Bun" src="https://img.shields.io/badge/Runtime-Bun-%23000000?logo=bun" />
     <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
