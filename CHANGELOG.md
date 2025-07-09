@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.0](https://github.com/jasonnathan/llm-core/compare/v0.4.0...v1.0.0) (2025-07-09)
+
+
+### Features
+
+* achieve 100% test coverage and refactor core modules ([481bcf5](https://github.com/jasonnathan/llm-core/commit/481bcf5d74976e698749f7a7dc71598319d78aa6))
+* improve project branding and developer experience ([27a6309](https://github.com/jasonnathan/llm-core/commit/27a63098ff23bac1f807ef8e35d8cfa841f4faab))
+
 ## [0.4.0](https://github.com/jasonnathan/llm-core/compare/v0.3.0...v0.4.0) (2025-07-09)
 
 ## [0.3.0](https://github.com/jasonnathan/llm-core/compare/v0.2.0...v0.3.0) (2025-07-09)

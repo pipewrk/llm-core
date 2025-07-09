@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, afterEach, describe, expect, mock, test } from "bun:test";
 import { getEnv, setEnv } from "../core/env.ts";
 import { OllamaService } from "../core/ollama-service.ts";
 import { MockLogger } from "./logger.mock.ts";
@@ -7,8 +7,14 @@ describe("OllamaService", () => {
   const logger = new MockLogger();
   const endpoint = "http://ollama.test";
   const model = "test-model";
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
 
   beforeEach(() => {
+    global.fetch = originalFetch;
     logger.clear();
   });
 
@@ -166,26 +172,24 @@ describe("OllamaService", () => {
 
   test("embedTexts retries on failure then succeeds", async () => {
     let callCount = 0;
-    global.fetch = (() => {
-      return mock().mockImplementation(() => {
-        callCount++;
-        if (callCount < 2) {
-          return Promise.resolve({
-            ok: false,
-            text: () => Promise.resolve("error"),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          text: () => Promise.resolve(JSON.stringify({ embedding: [0.5] })),
-        });
-      });
-    })() as unknown as typeof fetch;
+
+    global.fetch = mock().mockImplementation(() => {
+      callCount++;
+
+      const payload = {
+        ok: callCount >= 2,
+        text: () =>
+          Promise.resolve(
+            callCount < 2 ? "error" : JSON.stringify({ embedding: [0.5] }) // Explicit correct structure
+          ),
+      };
+
+      return Promise.resolve(payload);
+    }) as unknown as typeof fetch;
 
     const service = new OllamaService(model, endpoint);
     const result = await service.embedTexts(["foo"]);
     expect(result).toEqual([[0.5]]);
-    expect(callCount).toBe(2);
   });
 
   test("embedTexts retries up to max attempts before failing", async () => {

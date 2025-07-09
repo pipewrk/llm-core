@@ -1,6 +1,8 @@
 // File: src/logger.ts
 import winston from "winston";
 import chalk, { type ChalkInstance } from "chalk";
+import { dirname } from "path";
+import { existsSync, mkdirSync } from "fs";
 import type { ILogger } from "../types/dataset.ts";
 
 /**
@@ -48,6 +50,10 @@ export class Logger implements ILogger {
 
   constructor(logFilePath: string, ntfyServerUrl?: string) {
     this.ntfyServerUrl = ntfyServerUrl;
+    const logDir = dirname(logFilePath);
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
 
     // Define custom log levels and colors
     const logLevels = {
