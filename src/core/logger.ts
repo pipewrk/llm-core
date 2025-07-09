@@ -317,20 +317,4 @@ export class Logger implements ILogger {
       );
     }
   }
-
-  public async close(): Promise<void> {
-    const fileTransport = this.logger.transports.find(
-      (t) => t instanceof winston.transports.File
-    ) as winston.transports.FileTransportInstance | undefined;
-
-    if (!fileTransport) return;
-
-    const stream = (fileTransport as any)._stream;
-    if (!stream || typeof stream.end !== "function") return;
-
-    await new Promise<void>((resolve, reject) => {
-      stream.end(resolve);
-      stream.on("error", reject);
-    });
-  }
 }
