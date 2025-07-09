@@ -7,12 +7,12 @@ import { MockLogger } from "./logger.mock.ts";
 const logger = new MockLogger();
 
 const fixtures = [
-  // {
-  //   label: "txt",
-  //   file: new URL("../../data/who-sea.txt", import.meta.url),
-  //   out: "./chunks.ollama.txt.out.txt",
-  //   mode: "text",
-  // },
+  {
+    label: "txt",
+    file: new URL("../../data/who-sea.txt", import.meta.url),
+    out: "./chunks.ollama.txt.out.txt",
+    mode: "text",
+  },
   {
     label: "md",
     file: new URL("../../data/md-doc.md", import.meta.url),
