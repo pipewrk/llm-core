@@ -46,10 +46,14 @@
     "chalk": "^5.4.1",
     "cli-progress": "^3.12.0",
     "html-to-text": "^9.0.5",
+    "mdast": "^3.0.0",
+    "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
+    "sentence-splitter": "^5.0.0",
     "std-env": "^3.8.1",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0",
     "winston": "^3.17.0"
-  }
+  },
+  "packageManager": "pnpm@10.6.1+sha512.40ee09af407fa9fbb5fbfb8e1cb40fbb74c0af0c3e10e9224d7b53c7658528615b2c92450e74cfad91e3a2dcafe3ce4050d80bda71d757756d2ce2b66213e9a3"
 }
