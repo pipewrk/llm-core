@@ -4,8 +4,7 @@ This guide covers the advanced text and markdown chunking capabilities provided 
 
 This is ideal for preparing data for Retrieval-Augmented Generation (RAG) systems, where contextually rich chunks lead to better search results and more accurate LLM responses.
 
-<details>
-<summary>Semantic Splitting Logic Visual Flow</summary>
+## Semantic Splitting Logic Visual Flow
 
 ```mermaid
 flowchart TD
@@ -25,8 +24,6 @@ flowchart TD
     I --> J[Final Chunks]
 
 ```
-
-</details>
 
 ## Core Concepts
 
