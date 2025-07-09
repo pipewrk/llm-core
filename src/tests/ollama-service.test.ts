@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, afterEach, describe, expect, mock, test } from "bun:test";
 import { getEnv, setEnv } from "../core/env.ts";
 import { OllamaService } from "../core/ollama-service.ts";
 import { MockLogger } from "./logger.mock.ts";
@@ -7,8 +7,14 @@ describe("OllamaService", () => {
   const logger = new MockLogger();
   const endpoint = "http://ollama.test";
   const model = "test-model";
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
 
   beforeEach(() => {
+    global.fetch = originalFetch;
     logger.clear();
   });
 

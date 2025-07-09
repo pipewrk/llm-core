@@ -10,7 +10,7 @@ import fs from "fs/promises";
 import { existsSync, rmSync, mkdirSync } from "fs";
 import winston from "winston";
 
-const TEMP_LOG_DIR = "./tests/temp_logs_io";
+const TEMP_LOG_DIR = ".src/tests/temp_logs_io";
 const TEMP_LOG_PATH = `${TEMP_LOG_DIR}/test-log-io.md`;
 
 // Helper to gracefully close the logger and its transports
