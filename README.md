@@ -33,7 +33,6 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
   - [Set Up Environment](#set-up-environment)
-  - [Example: Building a Question Generation Pipeline](#example-building-a-question-generation-pipeline)
 - [Core Modules](#core-modules)
   - [`pipeline`](#pipeline)
   - [`OllamaService` and `OpenAIService`](#ollamaservice-and-openaiservice)
@@ -43,6 +42,7 @@
   - [Building the Project](#building-the-project)
   - [Running Tests](#running-tests)
   - [Release and Publish](#release-and-publish)
+
 
 ## `jasonnathan/llm-core`
 `llm-core` is a lightweight, modular TypeScript library for building robust, production-ready data processing and Large Language Model (LLM) workflows. It provides a focused set of powerful tools designed to solve common but complex problems in preparing, processing, and orchestrating LLM-centric tasks.
@@ -96,31 +96,32 @@ OPENAI_ENDPOINT="https://api.openai.com"
 # For Ollama
 OLLAMA_ENDPOINT="http://localhost:11434"
 ```
+That’s it, once your environment is configured, you’re ready to import only what you need from llm-core and start composing robust, production-ready LLM workflows.
 
-### 2. Example: Building a Question Generation Pipeline
+## Core Modules
 
-The `pipeline` module is a powerful feature for creating complex, multi-step data processing workflows. This example demonstrates a simplified pipeline that processes documents to generate questions.
+### `pipeline`
 
-For a complete guide to the Pipeline API and its advanced features, please see the **[Pipeline Module Developer Guide](./PIPELINE.md)**.
+The `pipeline` module allows you to chain together a series of processing steps to create sophisticated, reusable workflows. Each step is a function that receives the output of the previous one, making it easy to compose complex logic. It's generic, type-safe, and includes logging for each stage.
 
-```typescript
+#### Example: Building a Question Generation Pipeline
+
+Here's a simplified pipeline that processes documents to generate questions.
+
+```ts
 import { pipeline, createLogger, PipelineStep } from "@jasonnathan/llm-core";
 
-// Define the shape of our data object
 interface QuestionDoc {
   source: string;
   content: string;
   questions: string[];
 }
 
-// 1. Initialize a logger
 const logger = createLogger();
 
-// 2. Define pipeline steps
 const collectContentStep: PipelineStep<QuestionDoc[]> =
   (logger) => async (docs) => {
     logger.info("Collecting content...");
-    // In a real implementation, this would read from files or a database
     const newDocs = [
       { source: "doc1.md", content: "Pipelines are great.", questions: [] },
       { source: "doc2.md", content: "They are easy to use.", questions: [] },
@@ -131,55 +132,29 @@ const collectContentStep: PipelineStep<QuestionDoc[]> =
 const generateQuestionsStep: PipelineStep<QuestionDoc[]> =
   (logger) => async (docs) => {
     logger.info("Generating questions...");
-    // In a real implementation, this would call an LLM
     return docs.map((doc) => ({
       ...doc,
       questions: [`What is the main point of ${doc.source}?`],
     }));
   };
 
-// 3. Build the pipeline
 const questionPipeline = pipeline<QuestionDoc[]>(logger)
   .addStep(collectContentStep)
   .addStep(generateQuestionsStep);
 
-// 4. Run the pipeline
 async function main() {
   const initialDocs: QuestionDoc[] = [];
   const result = await questionPipeline.run(initialDocs);
-
   console.log(JSON.stringify(result, null, 2));
-  // Output:
-  // [
-  //   {
-  //     "source": "doc1.md",
-  //     "content": "Pipelines are great.",
-  //     "questions": ["What is the main point of doc1.md?"]
-  //   },
-  //   {
-  //     "source": "doc2.md",
-  //     "content": "They are easy to use.",
-  //     "questions": ["What is the main point of doc2.md?"]
-  //   }
-  // ]
 }
 
 main();
 ```
-
-## Core Modules
-
-### `pipeline`
-
-The `pipeline` module allows you to chain together a series of processing steps to create sophisticated, reusable workflows. Each step is a function that receives the output of the previous one, making it easy to compose complex logic. It's generic, type-safe, and includes logging for each stage.
-
-For detailed usage and advanced examples, see the **[Pipeline Module Developer Guide](./PIPELINE.md)**.
+That's how simple and powerful the pipeline abstraction is, allowing you to compose steps and inject logging or other effects across the whole workflow. For detailed usage and advanced examples, see the **[Pipeline Module Developer Guide](./PIPELINE.md)**.
 
 ### `OllamaService` and `OpenAIService`
 
 These services provide a consistent interface for interacting with Ollama and OpenAI APIs, handling requests, retries, and error handling. `OllamaService` is particularly powerful when paired with models that support structured JSON output.
-
-For detailed usage, including structured JSON responses and embeddings, see the **[OllamaService Developer Guide](./OLLAMA_SERVICE.md)**.
 
 **Usage:**
 
@@ -198,11 +173,11 @@ async function getGreeting() {
 }
 ```
 
+For detailed usage, including structured JSON responses and embeddings, see the **[OllamaService Developer Guide](./OLLAMA_SERVICE.md)**.
+
 ### `CosineDropChunker`
 
 The `CosineDropChunker` is a sophisticated tool for splitting text or markdown based on semantic similarity. Instead of using fixed sizes, it finds natural breaks in the content's topics, resulting in more contextually coherent chunks. This is ideal for preparing data for RAG systems.
-
-For a deep dive into semantic chunking and all configuration options, see the **[Semantic Chunker Developer Guide](./CHUNKER.md)**.
 
 **Usage:**
 
@@ -224,6 +199,8 @@ async function chunkMyMarkdown() {
   console.log(chunks);
 }
 ```
+
+For a deep dive into semantic chunking and all configuration options, see the **[Semantic Chunker Developer Guide](./CHUNKER.md)**.
 
 ### `markdownSplitter`
 
