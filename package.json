@@ -22,6 +22,9 @@
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major"
   },
+  "publishConfig": {
+    "access": "public"
+  },  
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jasonnathan/llm-core.git"
