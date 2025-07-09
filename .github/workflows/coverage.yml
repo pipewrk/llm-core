@@ -44,10 +44,7 @@ jobs:
           slug: jasonnathan/llm-core
       - name: Build package
         run: bun run build
-      - name: Configure npm auth
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
       - name: Publish package
-        run: bun publish --access public
         env:
-          NPM_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: bun publish --access public
