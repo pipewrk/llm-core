@@ -1,6 +1,6 @@
 {
   "name": "@jasonnathan/llm-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,7 +18,7 @@
     "exp": "ts-node ./src/test.ts ",
     "build": "tsup && tsc -p tsconfig.build.json",
     "release": "standard-version",
-    "release:patch": "standard-version --release-as patch && bun --env-file=.env publish",
+    "release:patch": "standard-version --release-as patch",
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major"
   },
