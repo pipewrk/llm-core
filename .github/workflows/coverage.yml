@@ -10,8 +10,7 @@ jobs:
   test-and-upload-coverage:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -46,8 +45,26 @@ jobs:
         run: bun run build
       - name: Configure npm auth
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_CONFIG_TOKEN }}" > ~/.npmrc
-      - name: Publish package
+          echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+          echo "always-auth=true" >> ~/.npmrc
         env:
-          NPM_CONFIG_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-        run: bun publish --access public
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+      - name: Publish package
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+      - name: Create GitHub release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          gh release create "${GITHUB_REF##*/}" \
+            --title "${GITHUB_REF##*/}" \
+            --notes "Automated release for version ${GITHUB_REF##*/}" || echo "Release may already exist."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts to release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "${GITHUB_REF##*/}" dist/* --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
