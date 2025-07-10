@@ -1,8 +1,6 @@
 <p align="center">
   <img src="./logo.png" alt="llm-core logo" width="360" />
-
   <h1 align="center">@jasonnathan/llm-core</h1>
-
   <p align="center">
     Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orchestration.
   </p>
