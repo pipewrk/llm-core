@@ -2,26 +2,23 @@
 
 Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orchestration.
 
-<p style="text-align: center;">
+<p align="center">
   <img src="./logo.png" alt="llm-core logo" width="360" />
-  </p>
-  <p style="text-align: center;">
-    <a href="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml">
-      <img alt="Build Status" src="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml/badge.svg" />
-    </a>
-    <a href="https://codecov.io/gh/jasonnathan/llm-core">
-      <img alt="Code Coverage" src="https://codecov.io/gh/jasonnathan/llm-core/branch/main/graph/badge.svg" />
-    </a>
-    <a href="https://www.npmjs.com/package/@jasonnathan/llm-core">
-      <img
-        alt="npm version"
-        src="https://img.shields.io/npm/v/@jasonnathan/llm-core.svg"
-      />
-    </a>
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Strict-blue?logo=typescript" />
-    <img alt="Bun" src="https://img.shields.io/badge/Runtime-Bun-%23000000?logo=bun" />
-    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
-  </p>
+</p>
+<p align="center">
+  <a href="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml">
+    <img alt="Build Status" src="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml/badge.svg" />
+  </a>
+  <a href="https://codecov.io/gh/jasonnathan/llm-core">
+    <img alt="Code Coverage" src="https://codecov.io/gh/jasonnathan/llm-core/branch/main/graph/badge.svg" />
+  </a>
+  <a href="https://www.npmjs.com/package/@jasonnathan/llm-core">
+    <img alt="npm version" src="https://img.shields.io/npm/v/@jasonnathan/llm-core.svg" />
+  </a>
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Strict-blue?logo=typescript" />
+  <img alt="Bun" src="https://img.shields.io/badge/Runtime-Bun-%23000000?logo=bun" />
+  <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+</p>
 
 ## Table of Contents
 
