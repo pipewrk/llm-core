@@ -1,12 +1,22 @@
 import type { ILogger } from "../types/dataset.ts";
 
-/**
- * A pipeline step is a function returning another function:
- *   (logger: Logger) => (doc: Document) => Promise<Document>
- *
- * The pipeline provides the logger, so your step logic only needs to handle the doc.
- */
-export type PipelineStep<T> = (logger: ILogger) => (doc: T) => Promise<T>;
+export type PipelineOutcome<T> =
+  | { done: true; value: T }
+  | { done: false; reason: string; payload: any };
+
+export type PipelineStep<T> = (
+  logger: ILogger
+) => (doc: T) => Promise<T | PipelineOutcome<T>>;
+
+export interface Pipeline<T> {
+  addStep: (step: PipelineStep<T>) => Pipeline<T>;
+  addMultiStrategyStep: (
+    subSteps: PipelineStep<T>[],
+    stopCondition?: (doc: T) => boolean
+  ) => Pipeline<T>;
+  run: (doc: T) => Promise<T>; // 🔁 restored for ergonomic default
+  stream: (doc: T) => AsyncGenerator<T | PipelineOutcome<T>, T, void>; // new
+}
 
 /**
  * Creates a pipeline for processing documents with a series of steps.
@@ -24,8 +34,7 @@ export type PipelineStep<T> = (logger: ILogger) => (doc: T) => Promise<T>;
  * - `addMultiStrategyStep(subSteps: PipelineStep<T>[], stopCondition?: (doc: T) => boolean)`: Adds multiple sub-steps with a stop condition.
  * - `run(doc: T): Promise<T>`: Executes all the steps in the pipeline sequentially on the provided document.
  */
-
-export function pipeline<T>(logger: ILogger) {
+export function pipeline<T>(logger: ILogger): Pipeline<T> {
   const steps: PipelineStep<T>[] = [];
 
   return {
@@ -34,9 +43,9 @@ export function pipeline<T>(logger: ILogger) {
      *
      * @param {PipelineStep<T>} step - The step to add.
      *
-     * @returns {object} The pipeline object itself, allowing for chaining.
+     * @returns {Pipeline<T>} The pipeline object itself, allowing for chaining.
      */
-    addStep(step: PipelineStep<T>) {
+    addStep(step: PipelineStep<T>): Pipeline<T> {
       steps.push(step);
       return this; // chainable
     },
@@ -53,26 +62,29 @@ export function pipeline<T>(logger: ILogger) {
      *
      * Chaining supported.
      */
-    addMultiStrategyStep(
-      subSteps: PipelineStep<T>[],
-      stopCondition?: (doc: T) => boolean,
-    ) {
+    addMultiStrategyStep(subSteps, stopCondition) {
       const multiStrategyStep: PipelineStep<T> = (stepLogger: ILogger) => {
-        return async (doc: T): Promise<T> => {
+        return async (doc: T): Promise<T | PipelineOutcome<T>> => {
           let currentDoc = doc;
 
           for (const [idx, subStep] of subSteps.entries()) {
             stepLogger.info(
-              `--- Running multi-strategy sub-step #${idx + 1} ---`,
+              `--- Running multi-strategy sub-step #${idx + 1} ---`
             );
 
             const transformFn = subStep(stepLogger);
-            currentDoc = await transformFn(currentDoc);
+            const result = await transformFn(currentDoc);
 
-            // If we have a stop condition and it's fulfilled, break early
+            if (isPipelineOutcome<T>(result)) {
+              if (!result.done) return result;
+              currentDoc = result.value;
+            } else {
+              currentDoc = result;
+            }
+
             if (stopCondition && stopCondition(currentDoc)) {
               stepLogger.impt(
-                `Short-circuited in multi-strategy after sub-step #${idx + 1}`,
+                `Short-circuited in multi-strategy after sub-step #${idx + 1}`
               );
               break;
             }
@@ -83,7 +95,7 @@ export function pipeline<T>(logger: ILogger) {
       };
 
       steps.push(multiStrategyStep);
-      return this; // chainable
+      return this;
     },
 
     /**
@@ -98,28 +110,67 @@ export function pipeline<T>(logger: ILogger) {
      * @returns {Promise<T>} A promise that resolves to the final transformed
      * document after all steps have been executed.
      */
+    async run(doc: T): Promise<T> {
+      let final: T = doc;
+      for await (const stepResult of this.stream(doc)) {
+        // at this point stepResult is always T, never PipelineOutcome
+        final = stepResult as T;
+      }
+      return final;
+    },
+    stream(doc: T): AsyncGenerator<T | PipelineOutcome<T>, T, void> {
+      const self = this;
 
-    run(doc: T): Promise<T> {
-      return steps.reduce<Promise<T>>(async (accPromise, step, index) => {
-        const accumulatedDoc = await accPromise;
+      async function* generator(): AsyncGenerator<
+        T | PipelineOutcome<T>,
+        T,
+        void
+      > {
+        let currentDoc = doc;
 
-        logger.info("=".repeat(50));
-        logger.info(`Running step #${index + 1}`);
-        logger.info("=".repeat(50));
+        for (const [index, step] of steps.entries()) {
+          logger.info("=".repeat(50));
+          logger.info(`Running step #${index + 1}`);
+          logger.info("=".repeat(50));
 
-        const transformFn = step(logger);
+          try {
+            const result = await step(logger)(currentDoc);
 
-        try {
-          const transformedDoc = await transformFn(accumulatedDoc);
-          return transformedDoc;
-        } catch (error) {
-          const errorMessage = error instanceof Error
-            ? error.message
-            : JSON.stringify(error);
-          logger.error(`Error in step #${index + 1}: ${errorMessage}`);
-          return accumulatedDoc;
+            if (isPipelineOutcome(result)) {
+              if (!result.done) {
+                yield result; // pause + signal
+                return currentDoc; // halt stream
+              }
+
+              currentDoc = result.value;
+            } else {
+              currentDoc = result;
+            }
+
+            yield currentDoc;
+          } catch (err) {
+            const errorMsg =
+              err instanceof Error ? err.toString() : JSON.stringify(err);
+            logger.error(`Error in step #${index + 1}: ${errorMsg}`);
+            yield currentDoc;
+          }
         }
-      }, Promise.resolve(doc));
+
+        return currentDoc;
+      }
+
+      return generator();
     },
   };
+}
+
+export function isPipelineOutcome<T>(
+  result: unknown
+): result is PipelineOutcome<T> {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "done" in result &&
+    typeof (result as any).done === "boolean"
+  );
 }

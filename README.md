@@ -1,11 +1,11 @@
-<p align="center">
-  <img src="./logo.png" alt="llm-core logo" width="360" />
-  <h1 align="center">@jasonnathan/llm-core</h1>
-  <p align="center">
-    Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orchestration.
-  </p>
+# @jasonnathan/llm-core
 
-  <p align="center">
+Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orchestration.
+
+<p style="text-align: center;">
+  <img src="./logo.png" alt="llm-core logo" width="360" />
+  </p>
+  <p style="text-align: center;">
     <a href="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml">
       <img alt="Build Status" src="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml/badge.svg" />
     </a>
@@ -22,7 +22,6 @@
     <img alt="Bun" src="https://img.shields.io/badge/Runtime-Bun-%23000000?logo=bun" />
     <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </p>
-</p>
 
 ## Table of Contents
 
@@ -32,17 +31,18 @@
 - [Quick Start](#quick-start)
   - [Set Up Environment](#set-up-environment)
 - [Core Modules](#core-modules)
+
   - [`pipeline`](#pipeline)
   - [`OllamaService` and `OpenAIService`](#ollamaservice-and-openaiservice)
   - [`CosineDropChunker`](#cosinedropchunker)
-  - [`markdownSplitter`](#markdownsplitter)
+
 - [Development](#development)
   - [Building the Project](#building-the-project)
   - [Running Tests](#running-tests)
   - [Release and Publish](#release-and-publish)
 
-
 ## `jasonnathan/llm-core`
+
 `llm-core` is a lightweight, modular TypeScript library for building robust, production-ready data processing and Large Language Model (LLM) workflows. It provides a focused set of powerful tools designed to solve common but complex problems in preparing, processing, and orchestrating LLM-centric tasks.
 
 It is unopinionated and designed to be composed into any existing application.
@@ -61,12 +61,12 @@ While many libraries can connect to LLM APIs, `llm-core` excels by providing sol
 
 ## Features
 
-- **🤖 Service Connectors**: Type-safe clients for OpenAI and Ollama APIs with built-in retry logic.
-- **🧩 Smart Chunking**: Advanced text and Markdown chunking based on semantic similarity (`CosineDropChunker`).
-- **✂️ Markdown Splitting**: Intelligently splits Markdown content while preserving its structure, ideal for preprocessing.
-- **⛓️ Pipelining**: A simple, generic, and powerful pipeline builder to chain data processing steps.
-- **✅ Type-Safe**: Fully written in TypeScript to ensure type safety across your workflows.
-- **⚙️ Environment-Aware**: Easily configured through environment variables.
+- **Service Connectors**: Type-safe clients for OpenAI and Ollama APIs with built-in retry logic.
+- **Smart Chunking**: Advanced text and Markdown chunking based on semantic similarity (`CosineDropChunker`).
+- **Markdown Splitting**: Intelligently splits Markdown content while preserving its structure, ideal for preprocessing.
+- **Pipelining**: A simple, generic, and powerful pipeline builder to chain data processing steps.
+- **Type-Safe**: Fully written in TypeScript to ensure type safety across your workflows.
+- **Environment-Aware**: Easily configured through environment variables.
 
 ## Installation
 
@@ -94,6 +94,7 @@ OPENAI_ENDPOINT="https://api.openai.com"
 # For Ollama
 OLLAMA_ENDPOINT="http://localhost:11434"
 ```
+
 That’s it, once your environment is configured, you’re ready to import only what you need from llm-core and start composing robust, production-ready LLM workflows.
 
 ## Core Modules
@@ -107,15 +108,13 @@ The `pipeline` module allows you to chain together a series of processing steps 
 Here's a simplified pipeline that processes documents to generate questions.
 
 ```ts
-import { pipeline, createLogger, PipelineStep } from "@jasonnathan/llm-core";
+import { pipeline, PipelineStep } from "@jasonnathan/llm-core";
 
 interface QuestionDoc {
   source: string;
   content: string;
   questions: string[];
 }
-
-const logger = createLogger();
 
 const collectContentStep: PipelineStep<QuestionDoc[]> =
   (logger) => async (docs) => {
@@ -148,6 +147,7 @@ async function main() {
 
 main();
 ```
+
 That's how simple and powerful the pipeline abstraction is, allowing you to compose steps and inject logging or other effects across the whole workflow. For detailed usage and advanced examples, see the **[Pipeline Module Developer Guide](./PIPELINE.md)**.
 
 ### `OllamaService` and `OpenAIService`
@@ -199,23 +199,6 @@ async function chunkMyMarkdown() {
 ```
 
 For a deep dive into semantic chunking and all configuration options, see the **[Semantic Chunker Developer Guide](./CHUNKER.md)**.
-
-### `markdownSplitter`
-
-This utility intelligently splits a Markdown document into smaller segments based on its structure (headings, paragraphs, code blocks, tables). It's useful for preprocessing documentation before embedding or analysis.
-
-**Usage:**
-
-```typescript
-import { markdownSplitter } from "@jasonnathan/llm-core";
-import fs from "fs/promises";
-
-async function splitMarkdown() {
-  const markdownContent = await fs.readFile("my-doc.md", "utf-8");
-  const chunks = markdownSplitter(markdownContent);
-  console.log(chunks);
-}
-```
 
 ## Development
 
