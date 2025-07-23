@@ -22,6 +22,7 @@ flowchart TD
         SC -- No --> E3[Strategy 3 - By Paragraph]
         E3 --> CONT
     end
+    H --> Z[Final Document]
 
     CONT --> S4[Step 4 - refineQuestions]
     S4 --> S5[Step 5 - generateAnswers]

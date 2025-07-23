@@ -4,9 +4,9 @@ export type PipelineOutcome<T> =
   | { done: true; value: T }
   | { done: false; reason: string; payload: any };
 
-export type PipelineStep<T> = (
-  logger: ILogger
-) => (doc: T) => Promise<T | PipelineOutcome<T>>;
+type StepResult<T> = T | PipelineOutcome<T> | Promise<T | PipelineOutcome<T>>;
+
+export type PipelineStep<T> = (logger: ILogger) => (doc: T) => StepResult<T>;
 
 export interface Pipeline<T> {
   addStep: (step: PipelineStep<T>) => Pipeline<T>;
