@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/jasonnathan/llm-core/compare/v1.0.8...v1.1.0) (2025-07-23)
+
+
+### Features
+
+* added a stream interface to pipeline to allow pausing ([950e3d6](https://github.com/jasonnathan/llm-core/commit/950e3d6fd9afc8c911e39901afcea700b2166ddc))
+
 ### [1.0.8](https://github.com/jasonnathan/llm-core/compare/v1.0.6...v1.0.8) (2025-07-10)
 
 ### [1.0.7](https://github.com/jasonnathan/llm-core/compare/v1.0.6...v1.0.7) (2025-07-10)
