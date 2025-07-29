@@ -1,6 +1,6 @@
 # @jasonnathan/llm-core
 
-Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orchestration.
+Composable LLM pipelines and semantic chunking tools, written in TypeScript, ready for production.
 
 <p align="center">
   <img src="./logo.png" alt="llm-core logo" width="360" />
@@ -44,7 +44,7 @@ Lightweight, composable TypeScript tools for chunking, pipelining, and LLM orche
 
 It is unopinionated and designed to be composed into any existing application.
 
-## Why Use `llm-core`?
+## What Makes `llm-core` Different?
 
 While many libraries can connect to LLM APIs, `llm-core` excels by providing solutions for the practical, real-world challenges that arise when building serious applications.
 

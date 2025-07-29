@@ -1,176 +1,196 @@
-import type { ILogger } from "../types/dataset.ts";
+/**
+ * Generic, composable pipeline implementation.
+ *
+ * A pipeline is a sequence of curried functions (“steps”) that take a
+ * user‑defined context `C` and a document `T`.  Each step returns either a
+ * new document or a `PipelineOutcome` to signal that execution should pause.
+ *
+ * The pipeline exposes three ways to execute:
+ *  - `run(doc)` executes all steps in order and resolves with the final doc.
+ *    If a step returns a pause, `run` resolves early with the current doc.
+ *  - `stream(doc)` returns an async generator that yields after every step.
+ *    The yielded object contains the step index, the step’s result and a
+ *    resumable state.  When a step pauses, the generator yields a
+ *    `PipelineOutcome` and continues when you call `next()`.
+ *  - `next(doc, state)` advances the pipeline one yield at a time.  You can
+ *    use this for fine‑grained control without managing the generator yourself.
+ *
+ * Steps, context and document types are fully generic.  Define your own
+ * context interface to carry shared state (logger, counters, caches, etc.).
+ * Define a document type that contains all fields your pipeline might add;
+ * optional fields are recommended for properties added by later steps.
+ */
 
 export type PipelineOutcome<T> =
   | { done: true; value: T }
   | { done: false; reason: string; payload: any };
 
-type StepResult<T> = T | PipelineOutcome<T> | Promise<T | PipelineOutcome<T>>;
+/**
+ * A step in the pipeline.  Given a context `C`, returns a function that
+ * transforms a document `T`.  The function may return the transformed doc
+ * synchronously or asynchronously, or it may return a `PipelineOutcome<T>` to
+ * pause execution.  If the outcome has `done: true`, the pipeline will
+ * continue with the returned value; if `done: false`, the pipeline will
+ * pause and yield control to the caller.
+ */
+export type PipelineStep<C, T> = (
+  ctx: C,
+) => (doc: T) => T | PipelineOutcome<T> | Promise<T | PipelineOutcome<T>>;
 
-export type PipelineStep<T> = (logger: ILogger) => (doc: T) => StepResult<T>;
-
-export interface Pipeline<T> {
-  addStep: (step: PipelineStep<T>) => Pipeline<T>;
-  addMultiStrategyStep: (
-    subSteps: PipelineStep<T>[],
-    stopCondition?: (doc: T) => boolean
-  ) => Pipeline<T>;
-  run: (doc: T) => Promise<T>; // 🔁 restored for ergonomic default
-  stream: (doc: T) => AsyncGenerator<T | PipelineOutcome<T>, T, void>; // new
+/**
+ * Internal state used by the streaming API.  Contains the document at the
+ * point of pause and the index of the next step to run when resuming.
+ */
+export interface StreamState<T> {
+  currentDoc: T;
+  nextStep: number;
 }
 
 /**
- * Creates a pipeline for processing documents with a series of steps.
- *
- * The pipeline allows adding individual steps or a set of sub-steps
- * with an optional stop condition. Each step is a function that takes
- * a logger and returns an asynchronous function to transform the document.
- *
- * @template T - The type of the document being processed.
- *
- * @param {ILogger} logger - The logger instance used for logging information during the pipeline execution.
- *
- * @returns {object} An object with methods to add steps and run the pipeline:
- * - `addStep(step: PipelineStep<T>)`: Adds a single step to the pipeline.
- * - `addMultiStrategyStep(subSteps: PipelineStep<T>[], stopCondition?: (doc: T) => boolean)`: Adds multiple sub-steps with a stop condition.
- * - `run(doc: T): Promise<T>`: Executes all the steps in the pipeline sequentially on the provided document.
+ * Object yielded by the streaming API.  Includes the result of the step
+ * (either a document or a `PipelineOutcome<T>`), the index of the step
+ * executed, and a `StreamState` used to resume the pipeline.
  */
-export function pipeline<T>(logger: ILogger): Pipeline<T> {
-  const steps: PipelineStep<T>[] = [];
+export interface StreamYield<T> {
+  value: T | PipelineOutcome<T>;
+  stepIndex: number;
+  state: StreamState<T>;
+}
+
+/**
+ * Interface returned by the `pipeline()` factory.  Provides methods to add
+ * steps, run the pipeline to completion, stream it, or advance one yield at
+ * a time.
+ */
+export interface Pipeline<C, T> {
+  /**
+   * Add a single step to the pipeline.  Returns the pipeline to allow
+   * chaining.
+   */
+  addStep(step: PipelineStep<C, T>): Pipeline<C, T>;
+  /**
+   * Execute all steps on the provided document.  Resolves with the final
+   * document when complete.  If a step returns a pause outcome, `run` will
+   * resolve early with the document as it stands.
+   */
+  run(doc: T): Promise<T>;
+  /**
+   * Stream the pipeline step‑by‑step.  Returns an async generator that
+   * yields after each step.  The yield value contains the step index, the
+   * step’s result and a state object used to resume.  If a step pauses,
+   * the generator yields a `PipelineOutcome<T>` and continues when the
+   * caller resumes via `next()`.
+   */
+  stream(doc: T, start?: StreamState<T>): AsyncGenerator<StreamYield<T>, T, void>;
+  /**
+   * Advance the pipeline one yield at a time.  Pass the current document
+   * and (optionally) a state object returned by a previous yield.  Returns
+   * either another `StreamYield<T>` or `{ done: true; value: T }` when
+   * complete.
+   */
+  next(
+    doc: T,
+    state?: StreamState<T>,
+  ): Promise<StreamYield<T> | { done: true; value: T }>;
+}
+
+/**
+ * Create a new pipeline instance.
+ *
+ * @param ctx A context object shared by all steps.  You define the shape
+ * of this object; typical fields include loggers, counters, caches,
+ * EventEmitters, etc.  Each step receives the same context instance.
+ */
+export function pipeline<C, T>(ctx: C): Pipeline<C, T> {
+  const steps: PipelineStep<C, T>[] = [];
+
+  /**
+   * Compose multiple sub‑steps into a single step.  Runs each sub‑step in
+   * order until either a pause outcome is returned or the stop condition
+   * evaluates to true.  If no sub‑steps pause and the stop condition never
+   * triggers, returns the result of the last sub‑step.
+   */
+  function wrapMulti(
+    subs: PipelineStep<C, T>[],
+    stop?: (doc: T) => boolean,
+  ): PipelineStep<C, T> {
+    return (c: C) => async (doc: T) => {
+      let d = doc;
+      for (const sub of subs) {
+        const result = await sub(c)(d);
+        if (isPipelineOutcome<T>(result)) {
+          if (!result.done) return result;
+          d = result.value;
+        } else {
+          d = result;
+        }
+        if (stop && stop(d)) break;
+      }
+      return d;
+    };
+  }
 
   return {
-    /**
-     * Adds a single step to the pipeline.
-     *
-     * @param {PipelineStep<T>} step - The step to add.
-     *
-     * @returns {Pipeline<T>} The pipeline object itself, allowing for chaining.
-     */
-    addStep(step: PipelineStep<T>): Pipeline<T> {
+    addStep(step) {
       steps.push(step);
-      return this; // chainable
-    },
-
-    /**
-     * Add a pipeline step with multiple, sequential strategies.
-     *
-     * Sub-steps will be executed until either all sub-steps have been executed or
-     * the stop condition function returns `true`.
-     *
-     * `stopCondition(doc: T) => boolean` is an optional function that takes
-     * the current document and returns `true` if we should stop executing
-     * sub-steps. If `undefined` or not provided, all sub-steps will be executed.
-     *
-     * Chaining supported.
-     */
-    addMultiStrategyStep(subSteps, stopCondition) {
-      const multiStrategyStep: PipelineStep<T> = (stepLogger: ILogger) => {
-        return async (doc: T): Promise<T | PipelineOutcome<T>> => {
-          let currentDoc = doc;
-
-          for (const [idx, subStep] of subSteps.entries()) {
-            stepLogger.info(
-              `--- Running multi-strategy sub-step #${idx + 1} ---`
-            );
-
-            const transformFn = subStep(stepLogger);
-            const result = await transformFn(currentDoc);
-
-            if (isPipelineOutcome<T>(result)) {
-              if (!result.done) return result;
-              currentDoc = result.value;
-            } else {
-              currentDoc = result;
-            }
-
-            if (stopCondition && stopCondition(currentDoc)) {
-              stepLogger.impt(
-                `Short-circuited in multi-strategy after sub-step #${idx + 1}`
-              );
-              break;
-            }
-          }
-
-          return currentDoc;
-        };
-      };
-
-      steps.push(multiStrategyStep);
       return this;
     },
-
-    /**
-     * Executes the pipeline steps sequentially on the provided document.
-     *
-     * Each step is executed in order, with the document being transformed
-     * by each step's asynchronous function. If a step throws an error, the
-     * error is logged, and the pipeline continues with the document as it
-     * was before the step execution.
-     *
-     * @param {T} doc - The initial document to be processed by the pipeline.
-     * @returns {Promise<T>} A promise that resolves to the final transformed
-     * document after all steps have been executed.
-     */
-    async run(doc: T): Promise<T> {
-      let final: T = doc;
-      for await (const stepResult of this.stream(doc)) {
-        // at this point stepResult is always T, never PipelineOutcome
-        final = stepResult as T;
+    async run(doc) {
+      let final = doc;
+      for await (const { value } of this.stream(doc)) {
+        final = value as T;
       }
       return final;
     },
-    stream(doc: T): AsyncGenerator<T | PipelineOutcome<T>, T, void> {
-      const self = this;
-
-      async function* generator(): AsyncGenerator<
-        T | PipelineOutcome<T>,
-        T,
-        void
-      > {
-        let currentDoc = doc;
-
-        for (const [index, step] of steps.entries()) {
-          logger.info("=".repeat(50));
-          logger.info(`Running step #${index + 1}`);
-          logger.info("=".repeat(50));
-
-          try {
-            const result = await step(logger)(currentDoc);
-
-            if (isPipelineOutcome(result)) {
-              if (!result.done) {
-                yield result; // pause + signal
-                return currentDoc; // halt stream
-              }
-
-              currentDoc = result.value;
-            } else {
-              currentDoc = result;
+    async *stream(doc, start) {
+      let currentDoc = start?.currentDoc ?? doc;
+      let index = start?.nextStep ?? 0;
+      for (; index < steps.length; index++) {
+        const stepFn = steps[index](ctx);
+        try {
+          const result = await stepFn(currentDoc);
+          if (isPipelineOutcome<T>(result)) {
+            if (!result.done) {
+              const state: StreamState<T> = { currentDoc, nextStep: index };
+              yield { value: result, stepIndex: index, state };
+              continue;
             }
-
-            yield currentDoc;
-          } catch (err) {
-            const errorMsg =
-              err instanceof Error ? err.toString() : JSON.stringify(err);
-            logger.error(`Error in step #${index + 1}: ${errorMsg}`);
-            yield currentDoc;
+            currentDoc = result.value;
+          } else {
+            currentDoc = result;
           }
+          const state: StreamState<T> = { currentDoc, nextStep: index + 1 };
+          yield { value: currentDoc, stepIndex: index, state };
+        } catch (err) {
+          // If the context has a logger, log the error.  Otherwise ignore.
+          (ctx as any)?.logger?.error?.(`Error in step #${index + 1}: ${err}`);
+          const state: StreamState<T> = { currentDoc, nextStep: index + 1 };
+          yield { value: currentDoc, stepIndex: index, state };
         }
-
-        return currentDoc;
       }
-
-      return generator();
+      return currentDoc;
+    },
+    async next(doc, state) {
+      const gen = this.stream(doc, state);
+      const res = await gen.next();
+      if (res.done) {
+        return { done: true as const, value: res.value };
+      }
+      return res.value;
     },
   };
 }
 
-export function isPipelineOutcome<T>(
-  result: unknown
-): result is PipelineOutcome<T> {
+/**
+ * Type guard for `PipelineOutcome`.  Returns true if the value is an
+ * object with a boolean `done` property.  Used internally to detect
+ * pause signals in steps.
+ */
+export function isPipelineOutcome<T>(result: unknown): result is PipelineOutcome<T> {
   return (
-    typeof result === "object" &&
+    typeof result === 'object' &&
     result !== null &&
-    "done" in result &&
-    typeof (result as any).done === "boolean"
+    'done' in (result as any) &&
+    typeof (result as any).done === 'boolean'
   );
 }

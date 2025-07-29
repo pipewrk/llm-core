@@ -9,7 +9,6 @@ export * from "./openai-service.ts";
 export * from "./pipeline.ts";
 export * from "./markdown-splitter.ts";
 export * from "./cosine-similarity.ts";
-export * from "./cosine-similarity.ts";
 export * from "./chunker.ts";
 export * from "./runtime.ts";
 export * from "./similarity-service.ts";
