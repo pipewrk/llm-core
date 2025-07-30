@@ -39,8 +39,14 @@ describe("Helper Function Tests", () => {
   describe("compose transformer", () => {
     it("runs all transformers in sequence when none pause", async () => {
       type Ctx = { count: number };
-      const t1 = (ctx: Ctx, doc: string) => [{ count: ctx.count + 1 }, doc + "A"] as const;
-      const t2 = (ctx: Ctx, doc: string) => [{ count: ctx.count + 2 }, doc + "B"] as const;
+
+      const t1 = (ctx: Ctx, doc: string): [Ctx, string] => {
+        return [{ count: ctx.count + 1 }, doc + "A"];
+      };
+
+      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
+        return [{ count: ctx.count + 2 }, doc + "B"];
+      };
       const composed = compose<Ctx, string>(t1, t2);
 
       const [newCtx, result] = await composed({ count: 0 }, "X");
@@ -50,10 +56,20 @@ describe("Helper Function Tests", () => {
 
     it("short‑circuits and propagates a pause outcome", async () => {
       type Ctx = { count: number };
-      const t1 = (_: Ctx, doc: string) =>
-        ([{ count: 0 }, { done: false, reason: "halt", payload: doc }] as const);
-      const t2 = (ctx: Ctx, doc: string) =>
-        ([{ count: ctx.count + 10 }, doc + "Z"] as const);
+
+      const t1 = (_: Ctx, doc: string): [Ctx, PipelineOutcome<string>] => {
+        const outcome: PipelineOutcome<string> = {
+          done: false,
+          reason: "halt",
+          payload: doc,
+        };
+        return [{ count: 0 }, outcome];
+      };
+
+      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
+        return [{ count: ctx.count + 10 }, doc + "Z"];
+      };
+
       const composed = compose<Ctx, string>(t1, t2);
 
       const [newCtx, result] = await composed({ count: 0 }, "X");
@@ -71,7 +87,9 @@ describe("Helper Function Tests", () => {
   describe("withErrorHandling", () => {
     it("run returns original document on error", async () => {
       const errorStep: PipelineStep<typeof ctx, { data: string }> =
-        () => async (doc) => { throw new Error("fail"); };
+        () => async (doc) => {
+          throw new Error("fail");
+        };
 
       const p = pipeline(ctx).addStep(withErrorHandling(errorStep));
       const result = await p.run({ data: "orig" });
@@ -80,12 +98,17 @@ describe("Helper Function Tests", () => {
 
     it("stream yields a pause event on error", async () => {
       const errorStep: PipelineStep<typeof ctx, { data: string }> =
-        () => async () => { throw new Error("fail"); };
+        () => async () => {
+          throw new Error("fail");
+        };
 
       const p = pipeline(ctx).addStep(withErrorHandling(errorStep));
       for await (const evt of p.stream({ data: "x" })) {
         if (evt.type === "pause") {
-          const outcome = evt.info as Extract<PipelineOutcome<{ data: string }>, { done: false }>;
+          const outcome = evt.info as Extract<
+            PipelineOutcome<{ data: string }>,
+            { done: false }
+          >;
           expect(outcome.reason).toBe("error");
           break;
         }
@@ -111,14 +134,19 @@ describe("Helper Function Tests", () => {
 
     it("stream yields only the final retryExceeded pause", async () => {
       const alwaysFail: PipelineStep<typeof ctx, { data: string }> =
-        () => async () => { throw new Error("fail"); };
+        () => async () => {
+          throw new Error("fail");
+        };
 
       ctx.pipeline.retries = 2;
       const p = pipeline(ctx).addStep(withRetry(alwaysFail));
 
       for await (const evt of p.stream({ data: "Y" })) {
         if (evt.type === "pause") {
-          const outcome = evt.info as Extract<PipelineOutcome<{ data: string }>, { done: false }>;
+          const outcome = evt.info as Extract<
+            PipelineOutcome<{ data: string }>,
+            { done: false }
+          >;
           if (outcome.reason === "retryExceeded") {
             expect(outcome.reason).toBe("retryExceeded");
             break;
@@ -130,8 +158,8 @@ describe("Helper Function Tests", () => {
 
   describe("withTimeout", () => {
     it("run pauses immediately when timeout=0", async () => {
-      const slow: PipelineStep<typeof ctx, { data: string }> =
-        () => () => new Promise(res => setTimeout(() => res({ data: "late" }), 10));
+      const slow: PipelineStep<typeof ctx, { data: string }> = () => () =>
+        new Promise((res) => setTimeout(() => res({ data: "late" }), 10));
 
       ctx.pipeline.timeout = 0;
       const p = pipeline(ctx).addStep(withTimeout(slow));
@@ -140,14 +168,17 @@ describe("Helper Function Tests", () => {
     });
 
     it("stream yields timeout pause", async () => {
-      const slow: PipelineStep<typeof ctx, { data: string }> =
-        () => () => new Promise(res => setTimeout(() => res({ data: "late" }), 10));
+      const slow: PipelineStep<typeof ctx, { data: string }> = () => () =>
+        new Promise((res) => setTimeout(() => res({ data: "late" }), 10));
 
       ctx.pipeline.timeout = 0;
       const p = pipeline(ctx).addStep(withTimeout(slow));
       for await (const evt of p.stream({ data: "in" })) {
         if (evt.type === "pause") {
-          const outcome = evt.info as Extract<PipelineOutcome<{ data: string }>, { done: false }>;
+          const outcome = evt.info as Extract<
+            PipelineOutcome<{ data: string }>,
+            { done: false }
+          >;
           expect(outcome.reason).toBe("timeout");
           break;
         }
@@ -165,7 +196,7 @@ describe("Helper Function Tests", () => {
         };
 
       ctx.pipeline.cache = new Map();
-      const p = pipeline(ctx).addStep(withCache(step, d => d.data));
+      const p = pipeline(ctx).addStep(withCache(step, (d) => d.data));
 
       const r1 = await p.run({ data: "A" });
       const r2 = await p.run({ data: "A" });
@@ -183,12 +214,14 @@ describe("Helper Function Tests", () => {
         };
 
       ctx.pipeline.cache = new Map();
-      const p = pipeline(ctx).addStep(withCache(step, d => d.data));
+      const p = pipeline(ctx).addStep(withCache(step, (d) => d.data));
 
       // first pass
-      for await (const _ of p.stream({ data: "B" })) {}
+      for await (const _ of p.stream({ data: "B" })) {
+      }
       // second pass same key
-      for await (const _ of p.stream({ data: "B" })) {}
+      for await (const _ of p.stream({ data: "B" })) {
+      }
       expect(hits).toBe(1);
     });
   });
@@ -226,12 +259,14 @@ describe("Helper Function Tests", () => {
 
   describe("withMultiStrategy", () => {
     it("run stops when stopCondition is met", async () => {
-      const sub1: PipelineStep<typeof ctx, { data: string }> =
-        () => doc => ({ data: doc.data + "1" });
-      const sub2: PipelineStep<typeof ctx, { data: string }> =
-        () => doc => ({ data: doc.data + "2" });
+      const sub1: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+        data: doc.data + "1",
+      });
+      const sub2: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+        data: doc.data + "2",
+      });
 
-      ctx.pipeline.stopCondition = doc => doc.data.endsWith("1");
+      ctx.pipeline.stopCondition = (doc) => doc.data.endsWith("1");
       const p = pipeline(ctx).addStep(withMultiStrategy([sub1, sub2]));
 
       const result = await p.run({ data: "X" });
@@ -239,19 +274,21 @@ describe("Helper Function Tests", () => {
     });
 
     it("stream yields progress events until stopCondition", async () => {
-      const sub1: PipelineStep<typeof ctx, { data: string }> =
-        () => doc => ({ data: doc.data + "A" });
-      const sub2: PipelineStep<typeof ctx, { data: string }> =
-        () => doc => ({ data: doc.data + "B" });
+      const sub1: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+        data: doc.data + "A",
+      });
+      const sub2: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+        data: doc.data + "B",
+      });
 
-      ctx.pipeline.stopCondition = doc => doc.data.includes("AB");
+      ctx.pipeline.stopCondition = (doc) => doc.data.includes("AB");
       const p = pipeline(ctx).addStep(withMultiStrategy([sub1, sub2]));
 
       const seen: string[] = [];
       for await (const evt of p.stream({ data: "Z" })) {
         if (evt.type === "progress") seen.push(evt.doc.data);
       }
-      expect(seen).toEqual([ "ZAB"]);
+      expect(seen).toEqual(["ZAB"]);
     });
   });
 });
