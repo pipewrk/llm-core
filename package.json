@@ -4,6 +4,24 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "keywords": [
+    "llm",
+    "large language models",
+    "pipeline",
+    "orchestration",
+    "semantic chunking",
+    "cosine similarity",
+    "text processing",
+    "rag",
+    "retrieval augmented generation",
+    "typescript",
+    "openai",
+    "ollama",
+    "embeddings",
+    "markdown splitting",
+    "chunking",
+    "ai workflows"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",
