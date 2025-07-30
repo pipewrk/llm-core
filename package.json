@@ -1,6 +1,18 @@
 {
   "name": "@jasonnathan/llm-core",
+  "description": "Composable TypeScript toolkit for LLM pipelines, semantic chunking, and AI workflow orchestration.",
+  "author": "Jason Nathan <jjnathanjr@gmail.com> (https://github.com/jasonnathan)",
   "version": "1.3.3",
+  "homepage": "https://github.com/jasonnathan/llm-core",
+  "bugs": {
+    "url": "https://github.com/jasonnathan/llm-core/issues"
+  },
+  "sideEffects": false,
+  "license": "MIT",
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.0.0"
+  },
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
