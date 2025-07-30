@@ -23,7 +23,7 @@ The pipeline core is intentionally minimal: it orchestrates the flow of a docume
 Combine multiple transformers into one. Each transformer has the signature `(ctx, doc) → [ctx, T | PipelineOutcome<T>]` or a promise of that tuple. When composed, the transformers run in sequence until either all complete or one returns a pause outcome. Synchronous and asynchronous transformers can be mixed freely.
 
 ```ts
-import { compose, Transformer } from './src/core/helpers';
+import { compose, Transformer } from '@jasonnathan/llm-core';
 
 const a: Transformer<Ctx, Doc> = async (ctx, doc) => { /* ... */ };
 const b: Transformer<Ctx, Doc> = async (ctx, doc) => { /* ... */ };
@@ -39,7 +39,7 @@ Use this when writing custom transformers or combining helper wrappers outside o
 Wrap a step so that any thrown exception becomes a pause. The returned step catches exceptions from the original step, stores the error on `ctx.error` (if that property exists) and returns `{ done: false, reason: 'error', payload: doc }`.
 
 ```ts
-import { withErrorHandling } from "./src/core/helpers";
+import { withErrorHandling } from "@jasonnathan/llm-core";
 
 // A step that may throw
 const flaky: PipelineStep<Ctx & { error?: unknown }, Doc> =
@@ -58,7 +58,7 @@ When the pipeline encounters a pause with reason `'error'`, you can decide wheth
 Attempt to run a step multiple times when it pauses due to an error. The number of retries is taken from `ctx.retries`, so your context type must include a `retries: number` field.
 
 ```ts
-import { withRetry } from './src/core/helpers';
+import { withRetry } from '@jasonnathan/llm-core';
 
 interface RetryCtx {
   retries: number;
@@ -78,7 +78,7 @@ If the retry limit is exceeded, the wrapper returns a pause with reason `'retryE
 Add a timeout to a step. The timeout duration (in milliseconds) is taken from ctx.timeout. If the step does not complete within this time, the helper returns a pause with reason "timeout".
 
 ```ts
-import { withTimeout } from './src/core/helpers';
+import { withTimeout } from '@jasonnathan/llm-core';
 
 interface TimeoutCtx { timeout: number; }
 
@@ -101,7 +101,7 @@ pipeline(ctx).addStep(guarded);
 Memoise a step’s result based on a key derived from the document. Results are stored on a `cache` property of the context. Only successful results (non‑pauses) are cached.
 
 ```ts
-import { withCache } from './src/core/helpers';
+import { withCache } from '@jasonnathan/llm-core';
 
 // Context must include a `cache` property for caching to work
 interface MyCtx {
@@ -130,7 +130,7 @@ Initialize `ctx.cache = new Map()` before using this helper.
 Create a step that executes a side effect and returns the document unchanged. Ideal for logging, tracing or metrics.
 
 ```ts
-import { tap } from "./src/core/helpers";
+import { tap } from "@jasonnathan/llm-core";
 
 const logStep = tap<Ctx, Doc>((ctx, doc) => {
   ctx.logger.info("Doc ID", doc.id);
@@ -143,7 +143,7 @@ pipeline(ctx).addStep(logStep);
 Compose multiple steps into one. Runs each sub‑step in order until one pauses or the optional `stopCondition(doc)` returns `true`.
 
 ```ts
-import { withMultiStrategy } from './src/core/helpers';
+import { withMultiStrategy } from '@jasonnathan/llm-core';
 
 interface MultiCtx {
   stopCondition?: (doc: Doc) => boolean;
@@ -176,7 +176,7 @@ Wrap a pipeline so you can listen to progress and pause events. Returns an `Even
 - `'error'`: `(err: unknown)`
 
 ```ts
-import { eventsFromPipeline } from "./src/core/helpers";
+import { eventsFromPipeline } from "@jasonnathan/llm-core";
 
 const emitter = eventsFromPipeline(p, initialDoc);
 emitter.on("progress", ({ value, stepIndex }) =>
@@ -193,7 +193,7 @@ This is useful for UI integration or monitoring long‑running pipelines.
 Convert a pipeline into a Node.js `Transform` stream. Each object written to the transform is processed through the pipeline. Normal results are pushed downstream as JSON strings; pauses trigger the optional `onPause` handler. The context’s state persists across chunks.
 
 ```ts
-import { pipelineToTransform } from "./src/core/helpers";
+import { pipelineToTransform } from "@jasonnathan/llm-core";
 import { createReadStream, createWriteStream } from "fs";
 
 const transform = pipelineToTransform(p, async (pause) => {

@@ -88,12 +88,148 @@ for await (const { value, stepIndex, state } of p.stream({ text: " hello " })) {
 }
 ```
 
-## API
+## API Reference & Usage
 
-- **Context‑based**: Steps accept a user‑defined context `C`. Use this context to carry loggers, counters, caches, event emitters or any other shared state through the entire pipeline.
-- **Helpers**: A suite of helpers provides features such as error handling, retries, timeouts, caching, tapping, progress events and Node stream integration. These helpers live alongside the core pipeline and are documented in `PIPELINE_HELPERS.md`.
+### Core Types
 
-## Next Steps
+#### `PipelineContext<U = {}, T = any>`
 
-To keep this guide focused, all helper functions are documented separately in [`PIPELINE_HELPERS.md`](https://chatgpt.com/c/PIPELINE_HELPERS.md). There you’ll find examples of how to rate‑limit a step, retry on errors, cache expensive computations, integrate with Node streams and EventEmitters, and compose multiple strategies.
-For advanced examples, including rate limiting, human‑in‑the‑loop workflows, backpressure handling and progress reporting, look in the `examples/` directory.
+A single context object that carries both your own fields **and** the pipeline’s built‑in controls and state:
+
+```ts
+export type PipelineContext<U = {}, T = any> = U & {
+  /** Pipeline helpers’ options */
+  pipeline: {
+    retries?: number;                        // ⏲ number of retry attempts
+    timeout?: number;                        // ⏲ race step vs timer
+    cache?: Map<any, unknown>;               // ⚡ memoisation store
+    stopCondition?: (doc: T) => boolean;     // 🛑 short‑circuit multi‑strategy
+  };
+  /** Internal state for streaming & resume */
+  state: {
+    history: Array<{ step: number; doc: T }>;
+    resume?: StreamState<T>;
+  };
+};
+```
+
+#### `PipelineOutcome<T>`
+
+Signal a pause or early “done” from within a step:
+
+```ts
+export type PipelineOutcome<T> =
+  | { done: false; reason: string; payload: T }  // pause, with a reason & document
+  | { done: true;  value: T };                  // an early “done” that still produces a new doc
+```
+
+#### `PipelineStep<C, T>`
+
+A curried function that, given your context type `C`, returns a transformer over `T`.  A step may return the new `T` (sync or async) or a `PipelineOutcome<T>` to pause or complete early.
+
+```ts
+export type PipelineStep<C, T> =
+  (ctx: C) =>
+    (doc: T) =>
+      T
+      | PipelineOutcome<T>
+      | Promise<T | PipelineOutcome<T>>;
+```
+
+---
+
+### Pipeline Factory
+
+#### `pipeline<C, T>(ctx: PipelineContext<C, T>): Pipeline<C, T>`
+
+Create a new pipeline bound to your context:
+
+```ts
+const myCtx: PipelineContext<{ logger: Console }, Doc> = {
+  logger: console,
+  pipeline: {},
+  state: { history: [] },
+};
+
+const p = pipeline(myCtx);
+```
+
+#### `addStep(step: PipelineStep<C, T>) → this`
+
+Append a single step to the pipeline’s sequence:
+
+```ts
+p.addStep(trimStep)
+ .addStep(validateStep)
+ .addStep(transformStep);
+```
+
+#### `run(doc: T) → Promise<T>`
+
+Execute every step in order and resolve with the final document.
+If any step returns a **pause** outcome (`done: false`), `run()` resolves immediately with the last document state.
+
+```ts
+const finalDoc = await p.run(initialDoc);
+```
+
+#### `stream(doc: T, start?: StreamState<T>) → AsyncGenerator<StreamEvent<C,T>, T, void>`
+
+Iterate step‑by‑step, yielding after **every** step:
+
+* **`type: 'progress'`** → a normal document
+* **`type: 'pause'`**    → a pause outcome `{ done:false,… }`
+* **`type: 'done'`**     → pipeline finished
+
+Use this for human‑in‑the‑loop, back‑pressure or progress reporting:
+
+```ts
+for await (const evt of p.stream(initialDoc)) {
+  if (evt.type === "pause") {
+    // handle evt.info, then resume…
+  } else if (evt.type === "progress") {
+    console.log(evt.doc);
+  }
+}
+```
+
+#### `next(doc: T, state?: StreamState<T>) → Promise<StreamYield<T> | {done:true;value:T}>`
+
+Advance the pipeline exactly one step (or resume from a pause) without managing the generator yourself.
+
+---
+
+### Streaming Types
+
+```ts
+export interface StreamState<T> {
+  currentDoc: T;     // last doc before the next step
+  nextStep: number;  // index of the next step to run
+}
+
+export interface StreamEvent<C, T> =
+  | { type: 'progress'; step: number; doc: T }
+  | { type: 'pause';    step: number; doc: T; info: Extract<PipelineOutcome<T>, {done:false}> }
+  | { type: 'done' };
+```
+
+### Helpers
+
+A suite of ready‑made wrappers lives in **`src/core/helpers.ts`** (see `PIPELINE_HELPERS.md`):
+
+* **Error handling**: `withErrorHandling(step)`
+* **Retries**:        `withRetry(step)`
+* **Timeouts**:       `withTimeout(step)`
+* **Caching**:        `withCache(step, keyFn)`
+* **Tap**:            `tap(sideEffect)`
+* **Multi‑strategy**: `withMultiStrategy([stepA, stepB, …])`
+* **Composable**:     `compose(t1, t2, …)`
+
+---
+
+### Integrations
+
+* **EventEmitter**:  `eventsFromPipeline(pipeline, initial)` → strongly‑typed emitter
+* **Node Streams**:  `pipelineToTransform(pipeline, onPause?)` → a `Transform` in object mode
+
+For detailed examples of rate‑limiting, human‑in‑the‑loop, backpressure, progress reporting, and more, see the companion [`PIPELINE_HELPERS.md`](./PIPELINE_HELPERS.md) and the `examples/` directory.

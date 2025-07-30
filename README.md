@@ -98,14 +98,57 @@ That’s it, once your environment is configured, you’re ready to import only 
 
 ### `pipeline`
 
-The `pipeline` module allows you to chain together a series of processing steps to create sophisticated, reusable workflows. Each step is a function that receives the output of the previous one, making it easy to compose complex logic. It's generic, type-safe, and includes logging for each stage.
+The `pipeline` module provides a lightweight, context‑based way to orchestrate data‑processing workflows. You provide a single context object which can be your `logger`, `counters`, `cache` or any other shared state. You then build the pipeline by chaining curried steps: 
+
+> each step receives that context and the current document, applies a synchronous or asynchronous transformation, and can optionally pause processing.
 
 #### Example: Building a Question Generation Pipeline
 
 Here's a simplified pipeline that processes documents to generate questions.
 
+```js
+import { pipeline } from "@jasonnathan/llm-core";
+
+// 1) Build your context once
+const ctx = {
+  logger: console,
+  pipeline: {},
+  state: { history: [] },
+};
+
+// 2) Define your steps as curried functions
+const collectContentStep = (ctx) => async (docs) => {
+  ctx.logger.info("Collecting content…");
+  return [
+    ...docs,
+    { source: "doc1.md", content: "Pipelines are great.", questions: [] },
+    { source: "doc2.md", content: "They’re easy to use.", questions: [] },
+  ];
+};
+
+const generateQuestionsStep = (ctx) => async (docs) => {
+  ctx.logger.info("Generating questions…");
+  return docs.map((doc) => ({
+    ...doc,
+    questions: [`What is the main point of ${doc.source}?`],
+  }));
+};
+
+// 3) Assemble and run
+const questionPipeline = pipeline(ctx)
+  .addStep(collectContentStep)
+  .addStep(generateQuestionsStep);
+
+;(async () => {
+  const result = await questionPipeline.run([]);
+  console.log(JSON.stringify(result, null, 2));
+})();
+```
+
+And here's the same thing in typescript:
+
 ```ts
-import { pipeline, PipelineStep } from "@jasonnathan/llm-core";
+import { pipeline, PipelineContext, PipelineStep } from "@jasonnathan/llm-core";
 
 interface QuestionDoc {
   source: string;
@@ -113,36 +156,52 @@ interface QuestionDoc {
   questions: string[];
 }
 
-const collectContentStep: PipelineStep<QuestionDoc[]> =
-  (logger) => async (docs) => {
-    logger.info("Collecting content...");
-    const newDocs = [
-      { source: "doc1.md", content: "Pipelines are great.", questions: [] },
-      { source: "doc2.md", content: "They are easy to use.", questions: [] },
-    ];
-    return [...docs, ...newDocs];
-  };
+// 1) Define your application context and wrap it in PipelineContext
+type AppCtx = { logger: Console };
+type Ctx = PipelineContext<AppCtx, QuestionDoc[]>;
 
-const generateQuestionsStep: PipelineStep<QuestionDoc[]> =
-  (logger) => async (docs) => {
-    logger.info("Generating questions...");
-    return docs.map((doc) => ({
-      ...doc,
-      questions: [`What is the main point of ${doc.source}?`],
-    }));
-  };
+const ctx: Ctx = {
+  // your own fields
+  logger: console,
 
-const questionPipeline = pipeline<QuestionDoc[]>(logger)
+  // pipeline helper slots (empty for defaults)
+  pipeline: {},
+
+  // internal state for stream/resume
+  state: { history: [] },
+};
+
+// 2) Define steps; each is (ctx) => (doc) => T | PipelineOutcome<T>
+const collectContentStep: PipelineStep<Ctx, QuestionDoc[]> = (ctx) => async (docs) => {
+  ctx.logger.info("Collecting content…");
+  return [
+    ...docs,
+    { source: "doc1.md", content: "Pipelines are great.", questions: [] },
+    { source: "doc2.md", content: "They’re easy to use.", questions: [] },
+  ];
+};
+
+const generateQuestionsStep: PipelineStep<Ctx, QuestionDoc[]> = (ctx) => async (docs) => {
+  ctx.logger.info("Generating questions…");
+  return docs.map((doc) => ({
+    ...doc,
+    questions: [`What is the main point of ${doc.source}?`],
+  }));
+};
+
+// 3) Build and run the pipeline
+const questionPipeline = pipeline(ctx)
   .addStep(collectContentStep)
   .addStep(generateQuestionsStep);
 
 async function main() {
-  const initialDocs: QuestionDoc[] = [];
-  const result = await questionPipeline.run(initialDocs);
+  const initial: QuestionDoc[] = [];
+  const result = await questionPipeline.run(initial);
   console.log(JSON.stringify(result, null, 2));
 }
 
 main();
+
 ```
 
 That's how simple and powerful the pipeline abstraction is, allowing you to compose steps and inject logging or other effects across the whole workflow. For detailed usage and advanced examples, see the **[Pipeline Module Developer Guide](./PIPELINE.md)**.
