@@ -34,35 +34,42 @@ export type Transformer<C, T> = (
 ) => [C, T | PipelineOutcome<T>] | Promise<[C, T | PipelineOutcome<T>]>;
 
 /**
- * Compose multiple transformers into one.  Runs each transformer in sequence
+ * Pipe multiple transformers into one.  Runs each transformer in sequence
  * until either all have completed or one returns a pause outcome.  The
  * individual transformers may return their results synchronously or
- * asynchronously; `compose` handles both by awaiting the result.
+ * asynchronously; `pipe` handles both by awaiting the result.
  *
  * It also short‑circuits if a pause is encountered before running later
  * transformers, and returns immediately on first pause.
  */
-export function compose<C, T>(...fns: Transformer<C, T>[]): Transformer<C, T> {
+export function pipe<C, T>(...fns: Transformer<C, T>[]): Transformer<C, T> {
   return async (ctx: C, doc: T) => {
-    let c: C = ctx;
+    let c = ctx;
     let d: T | PipelineOutcome<T> = doc;
 
     for (const fn of fns) {
       if (isPipelineOutcome(d) && !d.done) {
-        // propagate pause without further processing
         return [c, d];
       }
       const [nextCtx, nextDoc] = await fn(c, d as T);
       c = nextCtx;
       d = nextDoc;
       if (isPipelineOutcome(d) && !d.done) {
-        // early exit on pause
         return [c, d];
       }
     }
 
     return [c, d];
   };
+}
+
+/* --------------------------------------------------------------------------
+ *  Fp style compose
+ *  Applies f3 → f2 → f1 instead of f1 → f2 → f3.
+ */
+export function compose<C, T>(...fns: Transformer<C, T>[]): Transformer<C, T> {
+  // reverse the array so the last supplied fn runs first
+  return pipe<C, T>(...fns.slice().reverse());
 }
 
 /* --------------------------------------------------------------------------

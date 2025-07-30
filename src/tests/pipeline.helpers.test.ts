@@ -11,6 +11,7 @@ import { MockLogger } from "./logger.mock";
 import { appendStep, uppercaseStep } from "./steps.mock";
 import { setEnv } from "../core/env";
 import {
+  pipe,
   compose,
   withErrorHandling,
   withRetry,
@@ -36,7 +37,7 @@ describe("Helper Function Tests", () => {
     };
   });
 
-  describe("compose transformer", () => {
+  describe("pipe transformer", () => {
     it("runs all transformers in sequence when none pause", async () => {
       type Ctx = { count: number };
 
@@ -47,9 +48,10 @@ describe("Helper Function Tests", () => {
       const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
         return [{ count: ctx.count + 2 }, doc + "B"];
       };
-      const composed = compose<Ctx, string>(t1, t2);
 
-      const [newCtx, result] = await composed({ count: 0 }, "X");
+      const piped = pipe<Ctx, string>(t1, t2);
+      const [newCtx, result] = await piped({ count: 0 }, "X");
+
       expect(newCtx.count).toBe(3);
       expect(result).toBe("XAB");
     });
@@ -70,9 +72,9 @@ describe("Helper Function Tests", () => {
         return [{ count: ctx.count + 10 }, doc + "Z"];
       };
 
-      const composed = compose<Ctx, string>(t1, t2);
+      const piped = pipe<Ctx, string>(t1, t2);
+      const [newCtx, result] = await piped({ count: 0 }, "X");
 
-      const [newCtx, result] = await composed({ count: 0 }, "X");
       expect(newCtx.count).toBe(0);
       expect(isPipelineOutcome(result)).toBe(true);
       if (isPipelineOutcome(result) && !result.done) {
@@ -83,6 +85,56 @@ describe("Helper Function Tests", () => {
       }
     });
   });
+
+  describe("compose transformer", () => {
+    it("runs all transformers in sequence when none pause", async () => {
+      type Ctx = { count: number };
+
+      const t1 = (ctx: Ctx, doc: string): [Ctx, string] => {
+        return [{ count: ctx.count + 1 }, doc + "A"];
+      };
+
+      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
+        return [{ count: ctx.count + 2 }, doc + "B"];
+      };
+
+      const composed = compose<Ctx, string>(t1, t2);
+      const [newCtx, result] = await composed({ count: 0 }, "X");
+
+      expect(newCtx.count).toBe(3);
+      expect(result).toBe("XBA");
+    });
+
+    it("short‑circuits and propagates a pause outcome", async () => {
+      type Ctx = { count: number };
+
+      const t1 = (_: Ctx, doc: string): [Ctx, PipelineOutcome<string>] => {
+        const outcome: PipelineOutcome<string> = {
+          done: false,
+          reason: "halt",
+          payload: doc,
+        };
+        return [{ count: 0 }, outcome];
+      };
+
+      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
+        return [{ count: ctx.count + 10 }, doc + "Z"];
+      };
+
+      const composed = compose<Ctx, string>(t1, t2);
+      const [newCtx, result] = await composed({ count: 0 }, "X");
+
+      expect(newCtx.count).toBe(0);
+      expect(isPipelineOutcome(result)).toBe(true);
+      if (isPipelineOutcome(result) && !result.done) {
+        expect(result.reason).toBe("halt");
+        expect(result.payload).toBe("XZ");
+      } else {
+        throw new Error("Expected a pause outcome");
+      }
+    });
+  });
+
 
   describe("withErrorHandling", () => {
     it("run returns original document on error", async () => {

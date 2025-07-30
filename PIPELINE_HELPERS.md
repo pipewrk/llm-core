@@ -6,7 +6,7 @@ The pipeline core is intentionally minimal: it orchestrates the flow of a docume
 
 ## Table of contents
 
-1. [compose](#compose)
+1. [pipe](#pipe)
 2. [withErrorHandling](#witherrorhandling)
 3. [withRetry](#withretry)
 4. [withTimeout](#withtimeout)
@@ -18,17 +18,18 @@ The pipeline core is intentionally minimal: it orchestrates the flow of a docume
 
 ---
 
-## compose(...transforms)
+## pipe(...transforms)
 
-Combine multiple transformers into one. Each transformer has the signature `(ctx, doc) → [ctx, T | PipelineOutcome<T>]` or a promise of that tuple. When composed, the transformers run in sequence until either all complete or one returns a pause outcome. Synchronous and asynchronous transformers can be mixed freely.
+Combine multiple transformers into one. Each transformer has the signature `(ctx, T) → [ctx, T | PipelineOutcome<T>]` or a promise of that tuple. When composed, the transformers run in sequence until either all complete or one returns a pause outcome. Synchronous and asynchronous transformers can be mixed freely. Comes in `pipe` and `compose` variants.
 
 ```ts
-import { compose, Transformer } from '@jasonnathan/llm-core';
+import { pipe, compose, Transformer } from '@jasonnathan/llm-core';
 
 const a: Transformer<Ctx, Doc> = async (ctx, doc) => { /* ... */ };
 const b: Transformer<Ctx, Doc> = async (ctx, doc) => { /* ... */ };
 
-const ab = compose(a, b);
+// you can use compose(a, b) here as well, which runs b → a
+const ab = pipe(a, b);
 const [newCtx, result] = await ab(ctx, doc);
 ```
 
