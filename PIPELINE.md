@@ -8,16 +8,18 @@ The diagram below illustrates the pipeline model. A document enters the pipeline
 
 ```mermaid
 flowchart TD
-  Start([Context + Document]) --> Step1[Step 1]
-  Step1 -->|Doc| Step2[Step 2]
-  Step2 -->|Doc| Step3[Step 3]
-  Step3 -->|Doc| End[Final Document]
-  Step1 -.->|Pause (PipelineOutcome)| Pause1(( ))
-  Step2 -.->|Pause (PipelineOutcome)| Pause2(( ))
-  Step3 -.->|Pause (PipelineOutcome)| Pause3(( ))
-  Pause1 -- Resume --> Step1
-  Pause2 -- Resume --> Step2
-  Pause3 -- Resume --> Step3
+  Start[Context + Document] --> Step1[Step 1]
+  Step1 --> Step2[Step 2]
+  Step2 --> Step3[Step 3]
+  Step3 --> End[Final Document]
+
+  Step1 -. "Pause (PipelineOutcome)" .-> Pause1((PipelineOutcome))
+  Step2 -. "Pause (PipelineOutcome)" .-> Pause2((PipelineOutcome))
+  Step3 -. "Pause (PipelineOutcome)" .-> Pause3((PipelineOutcome))
+
+  Pause1 --> Step1
+  Pause2 --> Step2
+  Pause3 --> Step3
 ```
 
 Each dashed arrow represents a `PipelineOutcome<T>` returned by a step with `done: false`. The pipeline suspends execution at that point. When you resume (via `next()`), the pipeline picks up exactly where it left off.
