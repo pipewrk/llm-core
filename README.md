@@ -292,3 +292,11 @@ bun --env-file=.env release:patch
 ```
 
 This will bump the version, create a git tag, generate a changelog, and publish the package.
+
+<p align="center">
+  <sub>
+    Proudly brought to you by 
+    <a href="https://github.com/theGeekist" target="_blank">@theGeekist</a> and <a href="https://github.com/jasonnathan" target="_blank">@jasonnathan</a>
+  </sub>
+</p>
+
