@@ -2,49 +2,65 @@
  * Helper functions for the context‑based pipeline.
  *
  * These helpers provide reusable wrappers and utilities that can be applied
- * to steps or composed transformers.  All helpers operate on the same
- * `(ctx, doc) → [ctx, result]` shape, making them easy to compose.
+ * to steps or composed transformers.  All helpers operate on the
+ * same `(ctx, doc) → [ctx, doc | PipelineOutcome<T>]` shape, synchronously
+ * or via Promise, so they compose smoothly.
  */
 
 import { Transform } from "node:stream";
 import { EventEmitter } from "node:events";
 import { isPipelineOutcome } from "./pipeline";
 import type {
+  PipelineContext,
   PipelineOutcome,
   PipelineStep,
-  StreamState,
-  StreamYield,
+  StreamEvent,
 } from "./pipeline";
 
 /* --------------------------------------------------------------------------
  *  Type aliases for composed transformers
  */
 
+/**
+ * A composed transformer takes a context and a document and returns the
+ * updated context alongside either the updated document or a pause outcome.
+ *
+ * The return type may be synchronous (a tuple) or a Promise of that
+ * tuple.  Using `await` on the result will work for both cases.
+ */
 export type Transformer<C, T> = (
   ctx: C,
   doc: T
-) => Promise<[C, T | PipelineOutcome<T>]>;
+) => [C, T | PipelineOutcome<T>] | Promise<[C, T | PipelineOutcome<T>]>;
 
-/** Compose multiple transformers into one.  Runs each transformer in sequence
- * until either all have completed or one returns a pause outcome.
+/**
+ * Compose multiple transformers into one.  Runs each transformer in sequence
+ * until either all have completed or one returns a pause outcome.  The
+ * individual transformers may return their results synchronously or
+ * asynchronously; `compose` handles both by awaiting the result.
+ *
+ * It also short‑circuits if a pause is encountered before running later
+ * transformers, and returns immediately on first pause.
  */
 export function compose<C, T>(...fns: Transformer<C, T>[]): Transformer<C, T> {
   return async (ctx: C, doc: T) => {
     let c: C = ctx;
     let d: T | PipelineOutcome<T> = doc;
+
     for (const fn of fns) {
       if (isPipelineOutcome(d) && !d.done) {
         // propagate pause without further processing
         return [c, d];
       }
-      const result = await fn(c, d as T);
-      c = result[0];
-      d = result[1];
-      // if we paused, break early
+      const [nextCtx, nextDoc] = await fn(c, d as T);
+      c = nextCtx;
+      d = nextDoc;
       if (isPipelineOutcome(d) && !d.done) {
+        // early exit on pause
         return [c, d];
       }
     }
+
     return [c, d];
   };
 }
@@ -55,17 +71,17 @@ export function compose<C, T>(...fns: Transformer<C, T>[]): Transformer<C, T> {
 
 /**
  * Wrap a step with error handling.  Catches exceptions and converts them
- * into a pause outcome with reason `'error'`.  Adds the error to the
- * context under the optional `error` key.
+ * into a pause outcome with reason `'error'`.  Does *not* mutate arbitrary
+ * fields on the context, just returns the pause so the caller can react.
  */
-export function withErrorHandling<C extends { error?: unknown }, T>(
-  step: PipelineStep<C, T>
-): PipelineStep<C, T> {
+export function withErrorHandling<U, T>(
+  step: PipelineStep<PipelineContext<U, T>, T>
+): PipelineStep<PipelineContext<U, T>, T> {
   return (ctx) => async (doc) => {
     try {
       return await step(ctx)(doc);
-    } catch (err) {
-      ctx.error = err;
+    } catch {
+      // swallow the exception and signal a pause
       return {
         done: false,
         reason: "error",
@@ -76,33 +92,42 @@ export function withErrorHandling<C extends { error?: unknown }, T>(
 }
 
 /**
- * Retry a step up to `retries` times when it pauses with reason `'error'`.
- * If the step pauses for another reason, the pause is propagated immediately.
+ * Retry a step when it pauses because of an error.
+ * - Reads the retry limit from `ctx.pipeline.retries` (default 0).
+ * - Only retries on pauses where `reason === 'error'`.
+ * - Other pauses are propagated immediately.
+ * - Once retries are exhausted, returns a pause with `reason: 'retryExceeded'`.
  */
-export function withRetry<C extends { error?: unknown }, T>(
-  step: PipelineStep<C, T>,
-  retries = 3
-): PipelineStep<C, T> {
+export function withRetry<U, T>(
+  step: PipelineStep<PipelineContext<U, T>, T>
+): PipelineStep<PipelineContext<U, T>, T> {
   return (ctx) => async (doc) => {
     let attempt = 0;
-    let result: T | PipelineOutcome<T> | undefined;
-    while (attempt <= retries) {
-      const res = await withErrorHandling(step)(ctx)(doc);
-      if (isPipelineOutcome(res)) {
-        if (res.done) {
-          return res;
+    const maxRetries = ctx.pipeline.retries ?? 0;
+
+    while (attempt <= maxRetries) {
+      // wrap step so throws become error‑pauses
+      const result = await withErrorHandling(step)(ctx)(doc);
+
+      if (isPipelineOutcome(result)) {
+        if (result.done) {
+          // done=true means it's actually a normal T in a pause shape
+          return result;
         }
-        // pause with error
-        if (res.reason === "error") {
+        if (result.reason === "error") {
+          // retryable pause
           attempt++;
           continue;
         }
-        return res; // propagate other pauses
-      } else {
-        return res;
+        // non‑error pause -> propagate
+        return result;
       }
+
+      // successful doc
+      return result;
     }
-    // if we exhausted retries, return a pause
+
+    // out of retries
     return {
       done: false,
       reason: "retryExceeded",
@@ -112,15 +137,18 @@ export function withRetry<C extends { error?: unknown }, T>(
 }
 
 /**
- * Add a timeout to a step.  If the step does not complete within `ms`
- * milliseconds, returns a pause outcome with reason `'timeout'`.
+ * Add a timeout to a step.
+ * - Reads the duration from `ctx.pipeline.timeout` (default 0 = immediate).
+ * - Races the step against a timer; if the timer wins, returns
+ *   `{ done: false, reason: 'timeout', payload: doc }`.
+ * - Does *not* cancel the underlying step.
  */
-export function withTimeout<C, T>(
-  step: PipelineStep<C, T>,
-  ms: number
-): PipelineStep<C, T> {
+export function withTimeout<U, T>(
+  step: PipelineStep<PipelineContext<U, T>, T>
+): PipelineStep<PipelineContext<U, T>, T> {
   return (ctx) => async (doc) => {
-    return await Promise.race([
+    const ms = ctx.pipeline.timeout ?? 0;
+    return Promise.race<T | PipelineOutcome<T>>([
       step(ctx)(doc),
       new Promise<PipelineOutcome<T>>((resolve) =>
         setTimeout(
@@ -132,23 +160,31 @@ export function withTimeout<C, T>(
   };
 }
 
-export interface CacheCtx {
-  cache: Map<any, unknown>;
-}
-
-// A cache wrapper that uses the context's cache Map
-export function withCache<C extends CacheCtx, T>(
-  step: PipelineStep<C, T>,
-  keyFn: (doc: T) => any,
-): PipelineStep<C, T> {
+/**
+ * Memoise a step’s result based on a key derived from the document.
+ * - Reads the cache Map from `ctx.pipeline.cache`.  If no cache is configured,
+ *   the step just runs unmemoised.
+ * - Only caches successful results (i.e. non‑pause outcomes).
+ */
+export function withCache<U, T>(
+  step: PipelineStep<PipelineContext<U, T>, T>,
+  keyFn: (doc: T) => unknown
+): PipelineStep<PipelineContext<U, T>, T> {
   return (ctx) => async (doc) => {
-    const key = keyFn(doc);
-    if (ctx.cache.has(key)) {
-      return ctx.cache.get(key) as T;
+    const cache = ctx.pipeline.cache;
+    if (!cache) {
+      // no cache configured → just delegate
+      return step(ctx)(doc);
     }
+
+    const key = keyFn(doc);
+    if (cache.has(key)) {
+      return cache.get(key) as T;
+    }
+
     const result = await step(ctx)(doc);
     if (!isPipelineOutcome(result)) {
-      ctx.cache.set(key, result);
+      cache.set(key, result);
     }
     return result;
   };
@@ -172,33 +208,43 @@ export function tap<C, T>(
  */
 
 /**
- * Compose multiple sub‑steps into a single step.  Each sub‑step runs in
- * sequence with the same context.  If a sub‑step returns a pause
- * (`PipelineOutcome<T>` with `done: false`), the pause is propagated
- * immediately and no further sub‑steps are executed.  If `stopCondition`
- * returns true after a sub‑step completes normally, the remaining sub‑steps
- * are skipped.
+ * Compose multiple pipeline steps into one.
  *
- * @param subs Array of steps to attempt in order.
- * @param stop Optional predicate to short‑circuit on a successful doc.
+ * - Runs each sub‑step in sequence with the same context.
+ * - If a sub‑step returns a pause (`done === false`), that pause is
+ *   returned immediately (no further subs are run).
+ * - If a sub‑step returns a completion pause (`done === true`), we extract
+ *   the `.value` safely.
+ * - After any normal result, if `ctx.pipeline.stopCondition(doc)` returns
+ *   `true`, we break early.
  */
-export function withMultiStrategy<C, T>(
-  subs: PipelineStep<C, T>[],
-  stopCondition?: (doc: T) => boolean
-): PipelineStep<C, T> {
+export function withMultiStrategy<U, T>(
+  subs: PipelineStep<PipelineContext<U, T>, T>[]
+): PipelineStep<PipelineContext<U, T>, T> {
   return (ctx) => async (doc) => {
-    let current: T = doc;
+    let current = doc;
+
     for (const sub of subs) {
       const result = await sub(ctx)(current);
+
       if (isPipelineOutcome<T>(result)) {
-        // propagate pause or completion
-        return result;
+        if (!result.done) {
+          // Pause branch: propagate immediately
+          return result;
+        }
+        // Here TS knows result.done === true, so .value exists
+        current = result.value;
+      } else {
+        // Normal (non-pause) branch
+        current = result;
       }
-      current = result;
-      if (stopCondition && stopCondition(current)) {
+
+      const stop = ctx.pipeline.stopCondition;
+      if (stop && stop(current)) {
         break;
       }
     }
+
     return current;
   };
 }
@@ -207,46 +253,64 @@ export function withMultiStrategy<C, T>(
  *  EventEmitter integration
  */
 
+
+/**
+ * Dispatcher interface: strongly typed `.on(...)`, `emit(...)` and returns `this`.
+ */
+export interface PipelineEmitter<C, T> extends EventEmitter {
+  on(event: 'pause',    listener: (evt: Extract<StreamEvent<C, T>, { type: 'pause' }>)    => void): this;
+  on(event: 'progress', listener: (evt: Extract<StreamEvent<C, T>, { type: 'progress' }>) => void): this;
+  on(event: 'done',     listener: () => void): this;
+  on(event: 'error',    listener: (err: unknown) => void): this;
+
+  emit(event: 'pause',    evt: Extract<StreamEvent<C, T>, { type: 'pause' }>): boolean;
+  emit(event: 'progress', evt: Extract<StreamEvent<C, T>, { type: 'progress' }>): boolean;
+  emit(event: 'done'): boolean;
+  emit(event: 'error',    err: unknown): boolean;
+}
+
 /**
  * Convert a pipeline into an EventEmitter.  Emits `progress` when a step
  * completes normally, `pause` when a step returns a pause outcome, `done`
  * when the pipeline finishes, and `error` if an exception is thrown.
  */
 export function eventsFromPipeline<C, T>(
-  p: {
-    stream(
-      doc: T,
-      start?: StreamState<T>
-    ): AsyncGenerator<StreamYield<T>, T, void>;
-  },
-  initial: T
-): EventEmitter {
-  const emitter = new EventEmitter();
+  p: { stream(doc: T): AsyncGenerator<StreamEvent<C, T>, T, void> },
+  initial: T,
+): PipelineEmitter<C, T> {
+  const emitter = new EventEmitter() as PipelineEmitter<C, T>;
+
   (async () => {
-    for await (const { value, stepIndex, state } of p.stream(initial)) {
-      if (isPipelineOutcome<T>(value) && !value.done) {
-        // Narrow the union to the pause variant
-        const outcome = value as Extract<PipelineOutcome<T>, { done: false }>;
-        emitter.emit("pause", {
-          reason: outcome.reason,
-          payload: outcome.payload,
-          stepIndex,
-          state,
-        });
-      } else {
-        emitter.emit("progress", { value: value as T, stepIndex, state });
+    try {
+      for await (const evt of p.stream(initial)) {
+        switch (evt.type) {
+          case 'pause':
+            emitter.emit('pause', evt);
+            break;
+          case 'progress':
+            emitter.emit('progress', evt);
+            break;
+          case 'done':
+            emitter.emit('done');
+            break;
+        }
       }
+    } catch (err) {
+      emitter.emit('error', err);
     }
-    emitter.emit("done");
-  })().catch((err) => emitter.emit("error", err));
+  })();
+
   return emitter;
 }
 
 /* --------------------------------------------------------------------------
  *  Node stream integration
  */
-
-export type PauseHandler<T> = (pause: PipelineOutcome<T>) => Promise<void>;
+/**
+ * Handler for “pause” events from the stream.
+ */
+export type PauseEvent<C, T> = Extract<StreamEvent<C, T>, { type: 'pause' }>;
+export type PauseHandler<C, T> = (evt: PauseEvent<C, T>) => Promise<void>;
 
 /**
  * Create a Transform stream from a pipeline.  Each chunk is processed
@@ -256,32 +320,42 @@ export type PauseHandler<T> = (pause: PipelineOutcome<T>) => Promise<void>;
  */
 export function pipelineToTransform<C, T>(
   p: {
-    next(
-      doc: T,
-      state?: StreamState<T>
-    ): Promise<StreamYield<T> | { done: true; value: T }>;
+    next(doc: T): Promise<StreamEvent<C, T> | { done: true; value: T }>;
   },
-  onPause?: PauseHandler<T>
+  onPause?: PauseHandler<C, T>,
 ): Transform {
-  let state: StreamState<T> | undefined;
+  let current: T;
+
   return new Transform({
     objectMode: true,
-    async transform(chunk: T, _encoding, callback) {
-      let doc: T | PipelineOutcome<T> = chunk;
+
+    async transform(chunk: T, _enc, callback) {
+      current = chunk;
       try {
         while (true) {
-          const res = await p.next(doc as T, state);
-          if ("done" in res) {
-            this.push(JSON.stringify(res.value) + "\n");
+          const res = await p.next(current);
+
+          // **Pipeline-complete** case: raw {done,value}
+          if ('done' in res) {
+            this.push(JSON.stringify(res.value) + '\n');
             break;
-          } else {
-            const { value, state: nextState } = res;
-            state = nextState;
-            if (isPipelineOutcome(value) && !value.done) {
-              if (onPause) await onPause(value);
-            } else {
-              doc = value as T;
-            }
+          }
+
+          // **StreamEvent** case:
+          switch (res.type) {
+            case 'pause':
+              // res is guaranteed to be PauseEvent<C,T>
+              if (onPause) await onPause(res);
+              break;
+
+            case 'progress':
+              current = res.doc;
+              this.push(JSON.stringify(current) + '\n');
+              break;
+
+            case 'done':
+              // A StreamEvent 'done' signals end-of-stream
+              return callback(); // exit without error
           }
         }
         callback();
