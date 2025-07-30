@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/jasonnathan/llm-core/compare/v1.2.3...v1.3.0) (2025-07-30)
+
+
+### Features
+
+* new pipeline and tests ([ee0ed3b](https://github.com/jasonnathan/llm-core/commit/ee0ed3b126bfcd5011b64494f875fdda8f763d36))
+
 ### [1.2.3](https://github.com/jasonnathan/llm-core/compare/v1.2.2...v1.2.3) (2025-07-23)
 
 ### [1.2.2](https://github.com/jasonnathan/llm-core/compare/v1.2.1...v1.2.2) (2025-07-23)
