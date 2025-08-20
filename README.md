@@ -1,4 +1,4 @@
-# @jasonnathan/llm-core
+# @pipewrk/llm-core
 
 Composable LLM pipelines and semantic chunking tools, written in TypeScript, ready for production.
 
@@ -6,11 +6,11 @@ Composable LLM pipelines and semantic chunking tools, written in TypeScript, rea
   <img src="./logo.png" alt="llm-core logo" width="360" />
 </p>
 <p align="center">
-  <a href="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml">
-    <img alt="Build Status" src="https://github.com/jasonnathan/llm-core/actions/workflows/coverage.yml/badge.svg" />
+  <a href="https://github.com/pipewrk/llm-core/actions/workflows/coverage.yml">
+    <img alt="Build Status" src="https://github.com/pipewrk/llm-core/actions/workflows/coverage.yml/badge.svg" />
   </a>
-  <a href="https://codecov.io/gh/jasonnathan/llm-core">
-    <img alt="Code Coverage" src="https://codecov.io/gh/jasonnathan/llm-core/branch/main/graph/badge.svg" />
+  <a href="https://codecov.io/gh/pipewrk/llm-core">
+    <img alt="Code Coverage" src="https://codecov.io/gh/pipewrk/llm-core/branch/main/graph/badge.svg" />
   </a>
   <a href="https://www.npmjs.com/package/@jasonnathan/llm-core">
     <img alt="npm version" src="https://img.shields.io/npm/v/@jasonnathan/llm-core.svg" />
@@ -296,7 +296,7 @@ This will bump the version, create a git tag, generate a changelog, and publish 
 <p align="center">
   <sub>
     Proudly brought to you by 
-    <a href="https://github.com/theGeekist" target="_blank">@theGeekist</a> and <a href="https://github.com/jasonnathan" target="_blank">@jasonnathan</a>
+    <a href="https://github.com/theGeekist" target="_blank">@theGeekist</a> and <a href="https://github.com/pipewrk" target="_blank">@pipewrk</a>
   </sub>
 </p>
 
