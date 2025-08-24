@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.3.8](https://github.com/pipewrk/llm-core/compare/v1.3.7...v1.3.8) (2025-08-24)
+
+
+### Bug Fixes
+
+* workflow failure in upload ([807cb65](https://github.com/pipewrk/llm-core/commit/807cb65c2357452da7bacd86b306666bd663c3e9))
+
 ### [1.3.7](https://github.com/pipewrk/llm-core/compare/v1.3.6...v1.3.7) (2025-08-24)
 
 
