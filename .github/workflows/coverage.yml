@@ -80,8 +80,19 @@ jobs:
           CLEAN="${TAG#v}"
           echo "version=$CLEAN" >> "$GITHUB_OUTPUT"
 
-      - name: Set package.json version (no commit)
-        run: npm version ${{ steps.v.outputs.version }} --no-git-tag-version
+      - name: Sync package.json version to tag (idempotent)
+        id: syncver
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          V_FROM_TAG="${TAG#v}"
+          V_FROM_PKG=$(awk -F\" '/"version":/ {print $4; exit}' package.json)
+          echo "tag=$V_FROM_TAG pkg=$V_FROM_PKG"
+          if [ "$V_FROM_PKG" != "$V_FROM_TAG" ]; then
+            npm version "$V_FROM_TAG" --no-git-tag-version
+          else
+            echo "package.json already matches tag; skipping."
+          fi
 
       - name: Configure npm auth
         env:
