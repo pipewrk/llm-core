@@ -1,26 +1,29 @@
-name: Coverage Report
+name: CI + Release
 
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  test-and-upload-coverage:
+  test:
+    name: Test & Coverage
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')  # skip on tag pushes
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 'latest'
 
-      - name: Cache Bun dependencies
+      - name: Cache Bun deps
         uses: actions/cache@v4
         with:
           path: |
@@ -30,42 +33,80 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      - name: Install dependencies
+      - name: Install
         run: bun install
 
-      - name: Run tests with coverage
+      - name: Test (coverage)
         run: bun test --coverage --coverage-reporter=lcov
 
-      - name: Upload coverage reports to Codecov
+      - name: Upload coverage → Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: jasonnathan/llm-core
-      - name: Build package
+
+      - name: Build
         run: bun run build
-      - name: Configure npm auth
+
+  release:
+    name: Publish & GitHub Release (on tag)
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # make sure tag/refs are available
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+
+      - name: Install
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Extract version from tag
+        id: v
         run: |
-          echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          TAG="${GITHUB_REF#refs/tags/}"
+          # expect tags like v1.2.3; strip leading v if present
+          CLEAN="${TAG#v}"
+          echo "version=$CLEAN" >> "$GITHUB_OUTPUT"
+
+      - name: Set package.json version (no commit)
+        run: npm version ${{ steps.v.outputs.version }} --no-git-tag-version
+
+      - name: Configure npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
           echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
           echo "always-auth=true" >> ~/.npmrc
+
+      - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-      - name: Publish package (only on tags)
-        if: startsWith(github.ref, 'refs/tags/')
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-      - name: Create GitHub release (if tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          gh release create "${GITHUB_REF##*/}" \
-            --title "${GITHUB_REF##*/}" \
-            --notes "Automated release for version ${GITHUB_REF##*/}" || echo "Release may already exist."
+
+      - name: Create GitHub release (idempotent)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+          gh release create "$TAG" --title "$TAG" --notes "Automated release for $TAG"
 
       - name: Upload build artifacts to release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: gh release upload "${GITHUB_REF##*/}" dist/* --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          gh release upload "$TAG" dist/* --clobber
