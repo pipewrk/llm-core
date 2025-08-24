@@ -115,9 +115,14 @@ jobs:
           gh release view "$TAG" >/dev/null 2>&1 || \
           gh release create "$TAG" --title "$TAG" --notes "Automated release for $TAG"
 
+      # NEW: archive dist so we don't pass directories to gh
+      - name: Package dist as tar.gz
+        run: |
+          tar -czf "llm-core-${{ steps.v.outputs.version }}.tar.gz" -C dist .
+
       - name: Upload build artifacts to release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF##*/}"
-          gh release upload "$TAG" dist/* --clobber
+          gh release upload "${GITHUB_REF##*/}" "llm-core-${{ steps.v.outputs.version }}.tar.gz" --clobber
