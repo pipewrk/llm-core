@@ -148,7 +148,7 @@ const questionPipeline = pipeline(ctx)
 And here's the same thing in typescript:
 
 ```ts
-import { pipeline, PipelineContext, PipelineStep } from "@jasonnathan/llm-core";
+import { pipeline, PipelineStep } from "@jasonnathan/llm-core";
 
 interface QuestionDoc {
   source: string;
@@ -156,9 +156,17 @@ interface QuestionDoc {
   questions: string[];
 }
 
-// 1) Define your application context and wrap it in PipelineContext
-type AppCtx = { logger: Console };
-type Ctx = PipelineContext<AppCtx, QuestionDoc[]>;
+// 1) Define your application context shape
+type Ctx = {
+  logger: Console;
+  pipeline: {
+    retries?: number;
+    timeout?: number;
+    cache?: Map<any, unknown>;
+    stopCondition?: (doc: QuestionDoc[]) => boolean;
+  };
+  state: { history: Array<{ step: number; doc: QuestionDoc[] }> };
+};
 
 const ctx: Ctx = {
   // your own fields
@@ -190,7 +198,7 @@ const generateQuestionsStep: PipelineStep<Ctx, QuestionDoc[]> = (ctx) => async (
 };
 
 // 3) Build and run the pipeline
-const questionPipeline = pipeline(ctx)
+const questionPipeline = pipeline<Ctx, QuestionDoc[]>(ctx)
   .addStep(collectContentStep)
   .addStep(generateQuestionsStep);
 
@@ -299,4 +307,3 @@ This will bump the version, create a git tag, generate a changelog, and publish 
     <a href="https://github.com/theGeekist" target="_blank">@theGeekist</a> and <a href="https://github.com/pipewrk" target="_blank">@pipewrk</a>
   </sub>
 </p>
-

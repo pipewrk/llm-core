@@ -37,7 +37,7 @@ Use this when writing custom transformers or combining helper wrappers outside o
 
 ## withErrorHandling(step)
 
-Wrap a step so that any thrown exception becomes a pause. The returned step catches exceptions from the original step, stores the error on `ctx.error` (if that property exists) and returns `{ done: false, reason: 'error', payload: doc }`.
+Wrap a step so that any thrown exception becomes a pause. The returned step catches exceptions from the original step and returns `{ done: false, reason: 'error', payload: doc }` without mutating the context.
 
 ```ts
 import { withErrorHandling } from "@jasonnathan/llm-core";
@@ -56,17 +56,14 @@ When the pipeline encounters a pause with reason `'error'`, you can decide wheth
 
 ## withRetry(step, retries = 3)
 
-Attempt to run a step multiple times when it pauses due to an error. The number of retries is taken from `ctx.retries`, so your context type must include a `retries: number` field.
+Attempt to run a step multiple times when it pauses due to an error. The number of retries is taken from `ctx.pipeline.retries` (default `0`). Only pauses with `reason === 'error'` are retried; other pauses are propagated immediately.
 
 ```ts
 import { withRetry } from '@jasonnathan/llm-core';
 
-interface RetryCtx {
-  retries: number;
-  error?: unknown;
-}
+interface RetryCtx { pipeline: { retries?: number } }
 
-const ctx: RetryCtx = { retries: 5 };
+const ctx: RetryCtx = { pipeline: { retries: 5 } };
 
 const flakyStep = withRetry(flaky);
 pipeline(ctx).addStep(flakyStep);
@@ -76,12 +73,12 @@ If the retry limit is exceeded, the wrapper returns a pause with reason `'retryE
 
 ## withTimeout(step, ms)
 
-Add a timeout to a step. The timeout duration (in milliseconds) is taken from ctx.timeout. If the step does not complete within this time, the helper returns a pause with reason "timeout".
+Add a timeout to a step. The timeout duration (in milliseconds) is read from `ctx.pipeline.timeout`. If the step does not complete within this time, the helper returns a pause `{ done: false, reason: 'timeout', payload: doc }`. It does not cancel the underlying work.
 
 ```ts
 import { withTimeout } from '@jasonnathan/llm-core';
 
-interface TimeoutCtx { timeout: number; }
+interface TimeoutCtx { pipeline: { timeout: number } }
 
 const slow: PipelineStep<TimeoutCtx, Doc> = () => async (doc) => {
   await new Promise((res) => setTimeout(res, 10_000));
@@ -91,7 +88,7 @@ const slow: PipelineStep<TimeoutCtx, Doc> = () => async (doc) => {
 const guarded = withTimeout(slow);
 
 // Example context with a 2‑second timeout
-const ctx: TimeoutCtx = { timeout: 2000 };
+const ctx: TimeoutCtx = { pipeline: { timeout: 2000 } };
 
 pipeline(ctx).addStep(guarded);
 
@@ -99,16 +96,13 @@ pipeline(ctx).addStep(guarded);
 
 ## withCache(step, keyFn)
 
-Memoise a step’s result based on a key derived from the document. Results are stored on a `cache` property of the context. Only successful results (non‑pauses) are cached.
+Memoise a step’s result based on a key derived from the document. Results are stored in `ctx.pipeline.cache` if provided. Only successful results (non‑pauses) are cached; if no cache is configured, the step runs normally.
 
 ```ts
 import { withCache } from '@jasonnathan/llm-core';
 
 // Context must include a `cache` property for caching to work
-interface MyCtx {
-  cache: Map<any, unknown>;
-  logger: Console;
-}
+interface MyCtx { pipeline: { cache?: Map<any, unknown> } }
 
 const expensive: PipelineStep<MyCtx, Doc> = (ctx) => async (doc) => {
   // simulate expensive call
@@ -119,7 +113,7 @@ const expensive: PipelineStep<MyCtx, Doc> = (ctx) => async (doc) => {
 const cachedExpensive = withCache(expensive, (doc) => doc.id);
 
 // Create context with a cache Map and other fields
-const ctx: MyCtx = { cache: new Map(), logger: console };
+const ctx: MyCtx = { pipeline: { cache: new Map() } };
 
 pipeline(ctx).addStep(cachedExpensive);
 ```
@@ -141,14 +135,12 @@ pipeline(ctx).addStep(logStep);
 ```
 
 ## withMultiStrategy(subSteps, stopCondition?)
-Compose multiple steps into one. Runs each sub‑step in order until one pauses or the optional `stopCondition(doc)` returns `true`.
+Compose multiple steps into one. Runs each sub‑step in order until one pauses or the optional `ctx.pipeline.stopCondition(doc)` returns `true`.
 
 ```ts
 import { withMultiStrategy } from '@jasonnathan/llm-core';
 
-interface MultiCtx {
-  stopCondition?: (doc: Doc) => boolean;
-}
+interface MultiCtx { pipeline: { stopCondition?: (doc: Doc) => boolean } }
 
 const strategy1: PipelineStep<MultiCtx, Doc> = …;
 const strategy2: PipelineStep<MultiCtx, Doc> = …;
@@ -157,9 +149,7 @@ const strategy3: PipelineStep<MultiCtx, Doc> = …;
 const multi = withMultiStrategy([strategy1, strategy2, strategy3]);
 
 // Provide a stop condition via context
-const ctx: MultiCtx = {
-  stopCondition: (doc) => !!doc.result,
-};
+const ctx: MultiCtx = { pipeline: { stopCondition: (doc) => !!doc.result } };
 
 pipeline(ctx).addStep(multi);
 
@@ -169,21 +159,21 @@ If none of the strategies pause and the stop condition never triggers, the resul
 
 ## eventsFromPipeline(p, initial)
 
-Wrap a pipeline so you can listen to progress and pause events. Returns an `EventEmitter` that emits:
+Wrap a pipeline so you can listen to progress and pause events. Returns an `EventEmitter` that emits strongly‑typed events:
 
-- `'progress'`: `{ value: T; stepIndex: number; state: StreamState<T> }`
-- `'pause'`: `{ reason: string; payload: any; stepIndex: number; state: StreamState<T> }`
-- `'done'`: no payload
-- `'error'`: `(err: unknown)`
+- `'progress'`: `{ type: 'progress'; step: number; doc: T; resume: { nextStep: number; doc: T } }`
+- `'pause'`:    `{ type: 'pause';    step: number; doc: T; info: { done: false; reason: string; payload?: unknown }; resume: { nextStep: number; doc: T } }`
+- `'done'`:     `{ type: 'done' }`
+- `'error'`:    `(err: unknown)`
 
 ```ts
 import { eventsFromPipeline } from "@jasonnathan/llm-core";
 
 const emitter = eventsFromPipeline(p, initialDoc);
-emitter.on("progress", ({ value, stepIndex }) =>
-  console.log("step", stepIndex, value)
+emitter.on("progress", ({ step, doc }) =>
+  console.log("step", step, doc)
 );
-emitter.on("pause", ({ reason }) => console.log("paused because", reason));
+emitter.on("pause", ({ info }) => console.log("paused because", info.reason));
 emitter.on("done", () => console.log("finished"));
 ```
 
@@ -191,7 +181,7 @@ This is useful for UI integration or monitoring long‑running pipelines.
 
 ## pipelineToTransform(p, onPause?)
 
-Convert a pipeline into a Node.js `Transform` stream. Each object written to the transform is processed through the pipeline. Normal results are pushed downstream as JSON strings; pauses trigger the optional `onPause` handler. The context’s state persists across chunks.
+Convert a pipeline into a Node.js `Transform` stream. Each object written to the transform is processed through the pipeline using `p.next(doc, resume)`. Normal results are pushed downstream as newline‑delimited JSON; pauses trigger the optional `onPause` handler and stop processing of the current chunk. The transform carries a resume token internally so subsequent progress starts from the correct step.
 
 ```ts
 import { pipelineToTransform } from "@jasonnathan/llm-core";
@@ -208,8 +198,5 @@ createReadStream("in.ndjson", { encoding: "utf8", objectMode: true })
   .pipe(createWriteStream("out.ndjson"));
 ```
 
-If you don’t provide `onPause`, pauses are silently ignored and the pipeline resumes immediately.
+If you don’t provide `onPause`, the transform still stops processing the current chunk on a pause; it’s up to the caller to decide when to resume or re‑enqueue.
 
----
-
-This concludes the helper reference. Use these utilities to add retries, timeouts, caching, multi‑strategy logic, event emission and stream integration to your pipelines without cluttering your core logic.

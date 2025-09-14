@@ -286,7 +286,8 @@ export function eventsFromPipeline<C, T>(
 ): PipelineEmitter<C, T> {
   const emitter = new EventEmitter() as PipelineEmitter<C, T>;
 
-  (async () => {
+  // Defer start so consumers can attach listeners before first emit.
+  queueMicrotask(async () => {
     try {
       for await (const evt of p.stream(initial)) {
         switch (evt.type) {
@@ -304,7 +305,7 @@ export function eventsFromPipeline<C, T>(
     } catch (err) {
       emitter.emit('error', err);
     }
-  })();
+  });
 
   return emitter;
 }
@@ -326,7 +327,7 @@ export type PauseHandler<C, T> = (evt: PauseEvent<C, T>) => Promise<void>;
  */
 export function pipelineToTransform<C, T>(
   p: {
-    next(doc: T): Promise<StreamEvent<T> | { done: true; value: T }>;
+    next(doc: T, resume?: any): Promise<StreamEvent<T> | { done: true; value: T }>;
   },
   onPause?: PauseHandler<C, T>,
 ): Transform {
@@ -337,9 +338,10 @@ export function pipelineToTransform<C, T>(
 
     async transform(chunk: T, _enc, callback) {
       current = chunk;
+      let resumeState: any | undefined;
       try {
         while (true) {
-          const res = await p.next(current);
+          const res = await p.next(current, resumeState);
 
           // **Pipeline-complete** case: raw {done,value}
           if ('done' in res) {
@@ -352,11 +354,15 @@ export function pipelineToTransform<C, T>(
             case 'pause':
               // res is guaranteed to be PauseEvent<C,T>
               if (onPause) await onPause(res);
-              break;
+              // capture resume token to continue from the same point if caller rewrites
+              resumeState = res.resume;
+              return callback(); // stop processing this chunk on pause
 
             case 'progress':
               current = res.doc;
               this.push(JSON.stringify(current) + '\n');
+              // advance using provided resume token so we don't restart at step 0
+              resumeState = res.resume;
               break;
 
             case 'done':

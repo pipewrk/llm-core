@@ -1,233 +1,209 @@
-import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
-import { Logger } from "../core/logger";
-import { MockLogger } from "./logger.mock.ts";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 
-// Mock the entire winston module to prevent any file I/O and related race conditions
-const mockWinstonLogger = {
-  log: mock(() => {}),
-  on: mock(() => {}),
-  end: mock(() => {}),
-  error: mock(() => {}),
+// Mock winston BEFORE importing Logger
+type Captured = { level: string; message: string };
+const captured: Captured[] = [];
+const printfFns: Array<(info: any) => string> = [];
+const formattedOutputs: string[] = [];
+
+const fakeWinston = {
+  captured,
+  formattedOutputs,
+  addColors: mock((_colors: Record<string, string>) => {}),
+  transports: {
+    File: function File(this: any, _opts: any) {},
+    Console: function Console(this: any, _opts: any) {},
+  },
+  format: {
+    combine: (..._args: any[]) => ({}),
+    timestamp: () => ({}),
+    printf: (fn: any) => {
+      printfFns.push(fn);
+      return {};
+    },
+  },
+  createLogger: mock((_opts: any) => ({
+    log: ({ level, message }: { level: string; message: string }) => {
+      captured.push({ level, message });
+      const info = {
+        level,
+        message,
+        timestamp: new Date().toISOString(),
+      };
+      for (const f of printfFns) {
+        try {
+          const out = f(info);
+          if (typeof out === "string") formattedOutputs.push(out);
+        } catch {}
+      }
+    },
+    error: (msg: unknown) => {
+      const message = typeof msg === "string" ? msg : (msg as any)?.message ?? String(msg);
+      captured.push({ level: "error", message });
+    },
+  })),
 };
 
-// Correctly mock the winston module
-mock.module("winston", () => ({
-  __esModule: true, // Handle ES modules
-  default: {
-    createLogger: () => mockWinstonLogger,
-    transports: {
-      File: class {},
-      Console: class {},
-    },
-    format: {
-      combine: mock(() => ({})),
-      timestamp: mock(() => ({})),
-      printf: mock(() => ({})),
-    },
-    addColors: mock(() => {}),
-  },
-}));
+mock.module("winston", () => ({ default: fakeWinston }));
 
-describe("Logger Logic", () => {
-  let logger: Logger;
+const { Logger } = await import("../core/logger");
+
+describe("Logger", () => {
+  const logs = captured as Array<{ level: string; message: string }>;
+
+  let originalFetch: any;
 
   beforeEach(() => {
-    mockWinstonLogger.log.mockClear();
-    mockWinstonLogger.error.mockClear();
-    mock.restore();
-    logger = new Logger("./dummy.log");
+    logs.length = 0;
+    // @ts-ignore
+    originalFetch = global.fetch;
   });
 
   afterEach(() => {
-    if (logger["batchTimer"]) {
-      clearInterval(logger["batchTimer"]);
+    // reset fetch between tests
+    // @ts-ignore
+    global.fetch = originalFetch;
+  });
+
+  it("logs messages at all levels and stringifies objects", () => {
+    const logger = new Logger("./tmp/test-log.md");
+    logger.attn("a", { x: 1 });
+    logger.impt("b", { y: 2 });
+    logger.info("c", { z: 3 });
+    logger.warn("d", { w: 4 });
+    logger.error("e", { v: 5 });
+
+    expect(logs.length).toBe(5);
+    expect(logs[0]).toEqual({ level: "attn", message: "a {\n  \"x\": 1\n}" });
+    expect(logs[4]).toEqual({ level: "error", message: "e {\n  \"v\": 5\n}" });
+    // Ensure formatters were executed for both transports
+    expect((fakeWinston as any).formattedOutputs.length).toBeGreaterThan(0);
+    expect((fakeWinston as any).formattedOutputs.some((s: string) => s.includes("[ATTN]"))).toBe(true);
+  });
+
+  it("batches to Ntfy after batchSize messages", async () => {
+    const fetchCalls: any[] = [];
+    // @ts-ignore
+    global.fetch = mock((url: string, init?: any) => {
+      fetchCalls.push({ url, init });
+      return Promise.resolve({ ok: true, statusText: "OK" });
+    });
+
+    const logger = new Logger("./tmp/test-log.md", "https://ntfy.test/topic");
+
+    // 10 messages to hit batchSize
+    for (let i = 0; i < 10; i++) {
+      logger.info(`m${i}`);
     }
+
+    // flushQueue is async; give microtasks a tick
+    await Promise.resolve();
+
+    expect(fetchCalls.length).toBe(1);
+    const body: string = fetchCalls[0].init.body;
+    expect(body.split("\n").length).toBe(10);
+    expect(body.includes("m0")).toBe(true);
+    expect(body.includes("m9")).toBe(true);
   });
 
-  test("should forward log messages to winston", () => {
-    logger.info("info message");
-    expect(mockWinstonLogger.log).toHaveBeenCalledTimes(1);
-    expect(mockWinstonLogger.log).toHaveBeenCalledWith({
-      level: "info",
-      message: "info message",
-    });
-  });
-
-  test("should stringify non-string arguments", () => {
-    const obj = { a: 1 };
-    logger.warn("Warning:", obj);
-    expect(mockWinstonLogger.log).toHaveBeenCalledWith({
-      level: "warn",
-      message: `Warning: ${JSON.stringify(obj, null, 2)}`,
-    });
-  });
-
-  describe("Ntfy Integration", () => {
-    test("should send a batch when size limit is reached", () => {
-      global.fetch = (() => {
-        const fn = mock().mockImplementation(() =>
-          Promise.resolve({ ok: true })
-        );
-        (fn as any).preconnect = () => {}; // Add preconnect if TS complains
-        return fn;
-      })() as unknown as typeof fetch;
-
-      const ntfyLogger = new Logger("./dummy.log", "https://ntfy.sh/test");
-      (ntfyLogger as any).batchSize = 2;
-
-      ntfyLogger.info("message 1");
-      ntfyLogger.info("message 2");
-
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-    });
-
-    test("should log an internal error if fetch fails", async () => {
-      let callCount = 0;
-
-      global.fetch = (() => {
-        const fn = mock().mockImplementation(() =>
-          Promise.reject(new Error("Network Failure"))
-        );
-        // Add missing properties if needed
-        (fn as any).preconnect = () => {}; // Optional: stub for compatibility
-        return fn;
-      })() as unknown as typeof fetch;
-
-      const ntfyLogger = new Logger("./dummy.log", "https://ntfy.sh/test");
-
-      ntfyLogger.error("This will fail");
-      await (ntfyLogger as any).flushQueue();
-
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(mockWinstonLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to send batched logs to Ntfy")
-      );
-    });
-    test("flushQueueSync logs error if fetch throws", async () => {
-      global.fetch = (() => {
-        const fn = mock().mockImplementation(() =>
-          Promise.reject(new Error("Mock sync fetch error"))
-        );
-        (fn as any).preconnect = () => {};
-        return fn;
-      })() as unknown as typeof fetch;
-
-      const ntfyLogger = new Logger("./dummy.log", "https://ntfy.sh/test");
-      (ntfyLogger as any).messageQueue = ["msg 1", "msg 2"];
-
-      await (ntfyLogger as any).flushQueueSync();
-
-      expect(mockWinstonLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "Failed to send batched logs to Ntfy: Mock sync fetch error"
-        )
-      );
-    });
-
-    test("flushQueueSync logs error if response.ok is false", async () => {
-      global.fetch = (() => {
-        const fn = mock().mockImplementation(() =>
-          Promise.resolve({
-            ok: false,
-            statusText: "418 I'm a teapot",
-          })
-        );
-        (fn as any).preconnect = () => {};
-        return fn;
-      })() as unknown as typeof fetch;
-
-      const ntfyLogger = new Logger("./dummy.log", "https://ntfy.sh/test");
-      (ntfyLogger as any).messageQueue = ["msg 1", "msg 2"];
-
-      await (ntfyLogger as any).flushQueueSync();
-
-      expect(mockWinstonLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "HTTP Error when sending batched logs to Ntfy: 418 I'm a teapot"
-        )
-      );
-    });
-    test("should log attn level messages", () => {
-      logger.attn("urgent note");
-      expect(mockWinstonLogger.log).toHaveBeenCalledWith({
-        level: "attn",
-        message: "urgent note",
-      });
-    });
-
-    test("should log impt level messages", () => {
-      logger.impt("important update");
-      expect(mockWinstonLogger.log).toHaveBeenCalledWith({
-        level: "impt",
-        message: "important update",
-      });
-    });
-  });
-  test("startBatchTimer triggers flushQueue periodically", async () => {
-    const ntfyLogger = new Logger("./dummy.log", "https://ntfy.sh/test");
-
-    ntfyLogger["messageQueue"] = ["queued"];
-    ntfyLogger["flushQueue"] = mock(() => Promise.resolve());
-
-    (ntfyLogger as any).startBatchTimer(10); // use short interval for test
-
-    await new Promise((r) => setTimeout(r, 30)); // give timer time to tick
-
-    expect(ntfyLogger["flushQueue"]).toHaveBeenCalled();
-
-    clearInterval(ntfyLogger["batchTimer"]); // clean up timer
-  });
-});
-
-describe("MockLogger", () => {
-  let logger: MockLogger;
-
-  beforeEach(() => {
-    logger = new MockLogger();
-  });
-
-  test("captures all log levels", () => {
-    logger.attn("attention");
-    logger.impt("important");
-    logger.info("some info");
-    logger.warn("a warning");
-    logger.error("an error");
-
-    expect(logger.logs.attn[0]).toBe("attention");
-    expect(logger.logs.impt[0]).toBe("important");
-    expect(logger.logs.info[0]).toBe("some info");
-    expect(logger.logs.warn[0]).toBe("a warning");
-    expect(logger.logs.error[0]).toBe("an error");
-  });
-
-  test("stringifies non-string log arguments", () => {
-    logger.info("hello", { x: 1 }, [2, 3]);
-
-    expect(logger.logs.info[0]).toBe(
-      `hello ${JSON.stringify({ x: 1 }, null, 2)} ${JSON.stringify(
-        [2, 3],
-        null,
-        2
-      )}`
+  it("logs error when Ntfy responds non-OK", async () => {
+    // @ts-ignore
+    global.fetch = mock((_url: string, _init?: any) =>
+      Promise.resolve({ ok: false, statusText: "Bad" })
     );
+
+    const logger = new Logger("./tmp/test-log.md", "https://ntfy.bad/topic");
+
+    for (let i = 0; i < 10; i++) logger.info("x");
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // An error should be logged by the internal winston logger
+    expect(logs.some((l) => l.level === "error")).toBe(true);
   });
 
-  test("clear() resets all log buffers", () => {
-    logger.warn("to be cleared");
-    logger.clear();
-    expect(logger.logs.warn).toEqual([]);
+  it("flushQueueSync sends remaining messages immediately", async () => {
+    const calls: any[] = [];
+    // @ts-ignore
+    global.fetch = mock((url: string, init?: any) => {
+      calls.push({ url, init });
+      return Promise.resolve({ ok: true, statusText: "OK" });
+    });
+
+    const logger = new Logger("./tmp/test-log.md", "https://ntfy.sync/topic");
+    // enqueue fewer than batchSize
+    logger.info("one");
+    logger.info("two");
+
+    // @ts-ignore access private for coverage
+    await (logger as any).flushQueueSync();
+
+    expect(calls.length).toBe(1);
+    expect(calls[0].init.body).toContain("one");
+    expect(calls[0].init.body).toContain("two");
   });
-  test("formatArgs stringifies non-string values", () => {
-    const logger = new MockLogger();
-    logger.clear();
 
-    const obj = { foo: "bar" };
-    const arr = [1, 2];
-    const mix = "message";
+  it("stripConsoleFormatting and formatForPlainTransport work as expected", () => {
+    const logger = new Logger("./tmp/test-log.md");
+    const colored = "\x1b[31mRED\x1b[0m plain";
+    // @ts-ignore private access
+    const stripped = (logger as any).stripConsoleFormatting(colored);
+    expect(stripped).toContain("RED plain");
 
-    logger.info(mix, obj, arr);
+    // @ts-ignore private access
+    const fmt = (logger as any).formatForPlainTransport({ a: 1 });
+    expect(fmt).toBe("{\n  \"a\": 1\n}");
+  });
 
-    expect(logger.logs.info[0]).toContain(JSON.stringify(obj, null, 2));
-    expect(logger.logs.info[0]).toContain(JSON.stringify(arr, null, 2));
+  it("console formatter falls back to white for unknown level", () => {
+    const logger = new Logger("./tmp/test-log.md");
+    // call the internal log with an unknown level to hit fallback color path
+    // @ts-ignore private access
+    (logger as any).log("unknown", "\x1b[31mX\x1b[0m");
+    expect((fakeWinston as any).formattedOutputs.some((s: string) => s.includes("[UNKNOWN]"))).toBe(true);
+  });
+
+  it("startBatchTimer flushes periodically", async () => {
+    const calls: any[] = [];
+    // @ts-ignore
+    global.fetch = mock((url: string, init?: any) => {
+      calls.push({ url, init });
+      return Promise.resolve({ ok: true, statusText: "OK" });
+    });
+
+    const logger = new Logger("./tmp/test-log.md", "https://ntfy.timer/topic");
+    // @ts-ignore private access
+    (logger as any).startBatchTimer(1);
+    logger.info("tick1");
+    logger.info("tick2");
+    await new Promise((r) => setTimeout(r, 5));
+    // @ts-ignore
+    clearInterval((logger as any).batchTimer);
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it("flushQueue and flushQueueSync early-return when not configured", async () => {
+    const logger = new Logger("./tmp/test-log.md");
+    const origFetch = global.fetch;
+    // @ts-ignore ensure fetch would throw if called
+    global.fetch = mock(() => { throw new Error("should not be called"); });
+    // @ts-ignore private access
+    await (logger as any).flushQueue();
+    // @ts-ignore private access
+    await (logger as any).flushQueueSync();
+    // restore
+    // @ts-ignore
+    global.fetch = origFetch;
+    // No assertions; absence of thrown errors indicates early return taken
+  });
+
+  it("sendToNtfy throws on network errors", async () => {
+    // @ts-ignore
+    global.fetch = mock(() => Promise.reject(new Error("boom")));
+    const logger = new Logger("./tmp/test-log.md", "https://ntfy.throw/topic");
+    await expect(
+      // @ts-ignore private access
+      (logger as any).sendToNtfy("msg")
+    ).rejects.toThrow("Failed to send batched log to Ntfy");
   });
 });

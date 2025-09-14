@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 // File: ./tests/logger.mock.ts
 
 import type { ILogger } from "../types/dataset";

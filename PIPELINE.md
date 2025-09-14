@@ -8,9 +8,9 @@ The diagram below illustrates the pipeline model. A document enters the pipeline
 
 ```mermaid
 flowchart TD
-  Start[Context + Document] --> Step1[Step 1]
-  Step1 --> Step2[Step 2]
-  Step2 --> Step3[Step 3]
+  Start[Context + Document] --> Step1[Step 1]
+  Step1 --> Step2[Step 2]
+  Step2 --> Step3[Step 3]
   Step3 --> End[Final Document]
 
   Step1 -. "Pause (PipelineOutcome)" .-> Pause1((PipelineOutcome))
@@ -96,7 +96,7 @@ for await (const { value, stepIndex, state } of p.stream({ text: " hello " })) {
 
 #### `PipelineContext<U = {}, T = any>`
 
-A single context object that carries both your own fields **and** the pipeline’s built‑in controls and state:
+Suggested type alias (not exported) for the single context object that carries both your own fields **and** the pipeline’s built‑in controls and state:
 
 ```ts
 export type PipelineContext<U = {}, T = any> = U & {
@@ -204,14 +204,11 @@ Advance the pipeline exactly one step (or resume from a pause) without managing 
 ### Streaming Types
 
 ```ts
-export interface StreamState<T> {
-  currentDoc: T;     // last doc before the next step
-  nextStep: number;  // index of the next step to run
-}
+export type ResumeState<T> = { nextStep: number; doc: T };
 
-export interface StreamEvent<C, T> =
-  | { type: 'progress'; step: number; doc: T }
-  | { type: 'pause';    step: number; doc: T; info: Extract<PipelineOutcome<T>, {done:false}> }
+export type StreamEvent<T> =
+  | { type: 'progress'; step: number; doc: T; resume: ResumeState<T> }
+  | { type: 'pause';    step: number; doc: T; info: Extract<PipelineOutcome<T>, { done: false }>; resume: ResumeState<T> }
   | { type: 'done' };
 ```
 
@@ -231,7 +228,7 @@ A suite of ready‑made wrappers lives in **`src/core/helpers.ts`** (see `PIPELI
 
 ### Integrations
 
-* **EventEmitter**:  `eventsFromPipeline(pipeline, initial)` → strongly‑typed emitter
-* **Node Streams**:  `pipelineToTransform(pipeline, onPause?)` → a `Transform` in object mode
+* **EventEmitter**:  `eventsFromPipeline(pipeline, initial)` → emits `progress`, `pause`, `done`, `error` with resume tokens
+* **Node Streams**:  `pipelineToTransform(pipeline, onPause?)` → processes objects, pushes NDJSON; on pause calls handler and stops current chunk
 
 For detailed examples of rate‑limiting, human‑in‑the‑loop, backpressure, progress reporting, and more, see the companion [`PIPELINE_HELPERS.md`](./PIPELINE_HELPERS.md) and the `examples/` directory.
