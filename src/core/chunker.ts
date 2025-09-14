@@ -1,183 +1,236 @@
-import { withLogger } from "./decorators.ts";
-import type { ILogger } from "../types/dataset.ts";
+// chunker.pipeline.ts — low-cog version
+import { pipeline, type PipelineStep } from "./pipeline";
+import { withErrorHandling, withRetry, withTimeout, tap, withAlternatives } from "./helpers";
+import type { ChunkerContext, ChunkInput, Segments, Windows, Distances, Threshold, ChunkResult } from "../types/chunker";
 import { split } from "sentence-splitter";
-import { cosineSimilarity as cosine } from "./cosine-similarity.ts";
-import { markdownSplitter } from "./markdown-splitter.ts";
+import { markdownSplitter } from "./markdown-splitter";
+import { cosineSimilarity as cosine } from "./cosine-similarity";
 
-export type EmbedFunction = (texts: string[]) => Promise<number[][]>;
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Local type shorthands                                                      */
+/* ────────────────────────────────────────────────────────────────────────── */
+type Ctx = ChunkerContext;
+type Step<I, O> = PipelineStep<I, O, Ctx>;
 
-export interface ChunkOptions {
-  bufferSize?: number;
-  breakPercentile?: number;
-  minChunkSize?: number;
-  maxChunkSize?: number;
-  overlapSize?: number;
-  useHeadingsOnly?: boolean;
-  type?: "text" | "markdown";
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Small pure utilities                                                       */
+/* ────────────────────────────────────────────────────────────────────────── */
+export function preprocessText(text: string): string {
+  return text
+    .replace(/\r?\n+/g, " ")
+    .replace(/([a-z])([\u2013-])\s+([a-z])/gi, "$1$2$3")
+    .replace(/\s+/g, " ");
+}
+export function getSentences(pre: string): string[] {
+  return split(pre)
+    .filter(n => n.type === "Sentence")
+    .map(n => n.raw.trim())
+    .filter(s => s.length > 0);
+}
+export function opts(o: ChunkInput["options"]): Required<ChunkInput["options"]> {
+  return {
+    bufferSize: o.bufferSize ?? 2,
+    breakPercentile: o.breakPercentile ?? 90,
+    minChunkSize: o.minChunkSize ?? 300,
+    maxChunkSize: o.maxChunkSize ?? 2000,
+    overlapSize: o.overlapSize ?? 1,
+    useHeadingsOnly: o.useHeadingsOnly ?? false,
+    type: o.type ?? "text",
+  };
 }
 
-export interface TextChunker {
-  chunk(input: string, options: ChunkOptions): Promise<string[]>;
-  splitText(text: string): string[];
-  splitMarkdown(markdown: string, options: ChunkOptions): string[];
+export function splitText(text: string): string[] {
+  const preprocessed = preprocessText(text);
+  return getSentences(preprocessed);
 }
 
-@withLogger
-export class CosineDropChunker implements TextChunker {
-  protected readonly logger!: ILogger;
-  private readonly embedFn: EmbedFunction;
+export function splitMarkdown(markdown: string, options: ChunkInput["options"]): string[] {
+  const {
+    minChunkSize = 30,
+    maxChunkSize = 2000,
+    useHeadingsOnly = false,
+  } = options;
+  return markdownSplitter(markdown, {
+    minChunkSize,
+    maxChunkSize,
+    useHeadingsOnly,
+  });
+}
 
-  constructor(embedFn: EmbedFunction) {
-    this.embedFn = embedFn;
-  }
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Tiny steps (readable, unit-testable)                                       */
+/* ────────────────────────────────────────────────────────────────────────── */
 
-  public splitText(text: string): string[] {
-    const preprocessed = CosineDropChunker.preprocessText(text);
-    return CosineDropChunker.getSentences(preprocessed);
-  }
+// 1) split into segments
+export const sSplit: Step<ChunkInput, Segments> =
+  () => ({ input, options }) => {
+    const o = opts(options);
+    const segments =
+      o.type === "markdown"
+        ? markdownSplitter(input, { minChunkSize: o.minChunkSize, maxChunkSize: o.maxChunkSize, useHeadingsOnly: o.useHeadingsOnly })
+        : getSentences(preprocessText(input));
+    return { segments, options: o };
+  };
 
-  public splitMarkdown(markdown: string, options: ChunkOptions): string[] {
-    const {
-      minChunkSize = 30,
-      maxChunkSize = 2000,
-      useHeadingsOnly = false,
-    } = options;
-    const chunks = markdownSplitter(markdown, {
-      minChunkSize,
-      maxChunkSize,
-      useHeadingsOnly,
-    });
-    return chunks;
-  }
-
-  public async chunk(input: string, options: ChunkOptions): Promise<string[]> {
-    const segments = this.getSegments(input, options);
-
-    if (segments.length <= (options.bufferSize ?? 2)) {
-      this.logger.warn("CosineDrop: not enough segments to chunk");
-      return [input];
+// 2) guard: few segments → stitch and return one chunk later
+export const sGuardFew: Step<Segments, Segments> =
+  (ctx) => (s) => {
+    const o = opts(s.options);
+    if (s.segments.length <= o.bufferSize) {
+      ctx.logger?.warn?.("CosineDrop: not enough segments to chunk");
+      return { ...s, segments: [s.segments.join("\n")] };
     }
+    return s;
+  };
 
-    const windows = this.buildWindows(segments, options.bufferSize ?? 2);
-    const embeddings = await this.embedFn(windows);
-    const distances = this.calculateDistances(embeddings);
+// 3) windows
+export const sWindows: Step<Segments, Windows> =
+  () => (s) => {
+    const o = opts(s.options);
+    const windows = s.segments
+      .map((_, i) => s.segments.slice(i, i + o.bufferSize).join(" "))
+      .slice(0, s.segments.length - o.bufferSize + 1);
+    return { ...s, windows };
+  };
 
-    if (distances.length === 0) {
-      this.logger.warn(
-        "CosineDrop: all cosine similarities were invalid; returning full text as single chunk."
-      );
-      return [input];
-    }
+// 4) embeddings (only async step; wrapped with error/timeout/retry)
+export const sEmbed: Step<Windows, Windows & { embeddings: number[][] }> =
+  (ctx) => (w) => {
+    const inner: Step<Windows, Windows & { embeddings: number[][] }> =
+      () => async (doc) => {
+        const embeddings = await ctx.embed(doc.windows);
+        return { ...doc, embeddings };
+      };
+    return withRetry(withTimeout(withErrorHandling(inner)))(ctx)(w);
+  };
 
-    const threshold = this.calculateThreshold(
-      distances,
-      options.breakPercentile ?? 90
-    );
-    if (isNaN(threshold)) {
-      this.logger.warn(
-        "CosineDrop: computed threshold is invalid; skipping chunking."
-      );
-      return [input];
-    }
-
-    return this.performSplitting(segments, distances, threshold, options);
-  }
-
-  private getSegments(input: string, options: ChunkOptions): string[] {
-    const { type = "text" } = options;
-    return type === "markdown"
-      ? this.splitMarkdown(input, options)
-      : this.splitText(input);
-  }
-
-  private buildWindows(segments: string[], bufferSize: number): string[] {
-    return segments
-      .map((_, i) => segments.slice(i, i + bufferSize).join(" "))
-      .slice(0, segments.length - bufferSize + 1);
-  }
-
-  private calculateDistances(embeddings: number[][]): number[] {
+// 5) distances
+export const sDistances: Step<Windows & { embeddings: number[][] }, Distances> =
+  (ctx) => (w) => {
     const distances: number[] = [];
-    for (let i = 0; i + 1 < embeddings.length; i++) {
-      const sim = cosine(embeddings[i], embeddings[i + 1]);
-      if (!isNaN(sim)) distances.push(1 - sim);
+    for (let i = 0; i + 1 < w.embeddings.length; i++) {
+      const sim = cosine(w.embeddings[i], w.embeddings[i + 1]);
+      if (!Number.isNaN(sim)) distances.push(1 - sim);
     }
-    return distances;
-  }
+    if (distances.length === 0) {
+      ctx.logger?.warn?.("CosineDrop: all cosine similarities invalid; emitting single chunk");
+      return { segments: [w.segments.join("\n")], options: w.options, distances: [] };
+    }
+    return { segments: w.segments, options: w.options, distances };
+  };
 
-  private calculateThreshold(distances: number[], percentile: number): number {
-    const sorted = [...distances].sort((a, b) => a - b);
-    const idx = Math.floor((percentile / 100) * (sorted.length - 1));
-    return sorted[idx];
-  }
+// 6) threshold
+export const sThreshold: Step<Distances, Threshold> =
+  (ctx) => (d) => {
+    const o = opts(d.options);
+    const sorted = [...d.distances].sort((a, b) => a - b);
+    const idx = Math.floor((o.breakPercentile / 100) * (sorted.length - 1));
+    const threshold = sorted[idx];
+    if (Number.isNaN(threshold)) {
+      ctx.logger?.warn?.("CosineDrop: computed threshold invalid; emitting single chunk");
+      return { ...d, threshold: Number.NaN };
+    }
+    ctx.logger?.info?.(`CosineDrop: threshold at ${o.breakPercentile}th percentile = ${threshold.toFixed(4)}`);
+    return { ...d, threshold };
+  };
 
-  private performSplitting(
-    segments: string[],
-    distances: number[],
-    threshold: number,
-    options: ChunkOptions
-  ): string[] {
-    const {
-      bufferSize = 2,
-      minChunkSize = 300,
-      maxChunkSize = 2000,
-      overlapSize = 1,
-    } = options;
+// 7) split by threshold (final)
+export const sSplitBy: Step<Threshold, ChunkResult> =
+  (ctx) => (t) => {
+    const { bufferSize, minChunkSize, maxChunkSize, overlapSize } = opts(t.options);
 
-    this.logger.info(
-      `CosineDrop: threshold at ${
-        options.breakPercentile ?? 90
-      }th percentile = ${threshold.toFixed(4)}`
-    );
+    if (Number.isNaN(t.threshold)) {
+      return { chunks: [t.segments.join("\n")] };
+    }
 
     const chunks: string[] = [];
     let start = 0;
 
-    for (let i = 0; i + 1 < distances.length; i++) {
-      const dist = distances[i];
-      const prospective = segments.slice(start, i + bufferSize).join("\n");
-      const willSplit = !isNaN(dist) && dist >= threshold;
+    for (let i = 0; i + 1 < t.distances.length; i++) {
+      const dist = t.distances[i];
+      const prospective = t.segments.slice(start, i + bufferSize).join("\n");
+      const willSplit = !Number.isNaN(dist) && dist >= t.threshold;
       const tooBig = prospective.length > maxChunkSize;
 
       if (willSplit || tooBig) {
         if (prospective.length >= minChunkSize) {
-          this.logger.info(
-            `CosineDrop: splitting at segment ${i} (dist=${dist.toFixed(
-              4
-            )}, size=${prospective.length})`
-          );
+          ctx.logger?.info?.(`CosineDrop: splitting at segment ${i} (dist=${dist.toFixed(4)}, size=${prospective.length})`);
           chunks.push(prospective);
           start = Math.max(i + bufferSize - overlapSize, start + 1);
         }
       }
     }
 
-    if (start < segments.length) {
-      const last = segments.slice(start).join("\n");
-      if (last.length >= minChunkSize || chunks.length === 0) {
-        chunks.push(last);
-      } else {
-        this.logger.warn(
-          "CosineDrop: final chunk dropped due to insufficient length"
-        );
-      }
+    if (start < t.segments.length) {
+      const last = t.segments.slice(start).join("\n");
+      if (last.length >= minChunkSize || chunks.length === 0) chunks.push(last);
+      else ctx.logger?.warn?.("CosineDrop: final chunk dropped — too short");
     }
 
-    this.logger.info(`CosineDrop: produced ${chunks.length} chunks`);
-    return chunks;
+    ctx.logger?.info?.(`CosineDrop: produced ${chunks.length} chunks`);
+    return { chunks };
+  };
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Precomposed programs                                                       */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export function buildCosinePipeline(ctx: Ctx) {
+  return pipeline<Ctx, ChunkInput>(ctx)
+    .addStep(sSplit)
+    .addStep(sGuardFew)
+    .addStep(sWindows)
+    .addStep(sEmbed)
+    .addStep(sDistances)
+    .addStep(sThreshold)
+    .addStep(sSplitBy);
+}
+
+export const cosineStrategy: Step<ChunkInput, ChunkResult> =
+  (ctx) => (doc) => buildCosinePipeline(ctx).run(doc);
+
+export const identityStrategy: Step<ChunkInput, ChunkResult> =
+  () => (doc) => ({ chunks: [doc.input] });
+
+export const stopWhenAnyChunks = (r: ChunkResult) => r.chunks.length >= 1;
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Public API                                                                 */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export async function cosineDropChunker(
+  ctx: Ctx,
+  input: string,
+  options: ChunkInput["options"] = {}
+): Promise<string[]> {
+  const buf = Math.max(1, options.bufferSize ?? 2);
+
+  // 1) Segment first
+  const segments =
+    (options.type ?? "text") === "markdown"
+      ? splitMarkdown(input, options)
+      : splitText(input);
+
+  // 2) Early return - preserve EXACT original text
+  if (segments.length <= buf) {
+    ctx.logger?.warn?.("CosineDrop: not enough segments to chunk");
+    return [input];
   }
 
-  private static preprocessText(text: string): string {
-    return text
-      .replace(/\r?\n+/g, " ")
-      .replace(/([a-z])([\u2013-])\s+([a-z])/gi, "$1$2$3")
-      .replace(/\s+/g, " ");
-  }
+  const multiStrategy = withAlternatives<ChunkInput, ChunkResult, Ctx>(
+    [cosineStrategy, identityStrategy],
+    stopWhenAnyChunks
+  );
 
-  private static getSentences(pre: string): string[] {
-    return split(pre)
-      .filter((node) => node.type === "Sentence")
-      .map((node) => node.raw.trim())
-      .filter((s) => s.length > 0);
-  }
+  const p = pipeline<Ctx, ChunkInput>(ctx)
+    .addStep(tap<ChunkInput, Ctx>((ctx) => {
+      ctx.logger?.info?.("CosineDrop: start");
+    }))
+    .addStep(multiStrategy)
+    .addStep(tap<ChunkResult, Ctx>((ctx, doc) => {
+      ctx.logger?.info?.(`CosineDrop: done (${doc.chunks.length} chunks)`);
+    }));
+
+  const out = await p.run({ input, options });
+  return out.chunks;
 }

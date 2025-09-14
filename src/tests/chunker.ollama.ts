@@ -1,7 +1,6 @@
 import { test } from "bun:test";
-import { OllamaService } from "../core/ollama-service.ts";
-import { CosineDropChunker } from "../core/chunker.ts";
-import { markdownSplitter } from "../core/markdown-splitter.ts";
+import { createOllamaContext, embedTexts } from "../core/ollama-service.ts";
+import { cosineDropChunker } from "../core/chunker.ts";
 import { MockLogger } from "./logger.mock.ts";
 
 const logger = new MockLogger();
@@ -24,19 +23,17 @@ const fixtures = [
 const endpoint = "http://localhost:11434";
 const model = "all-minilm:l6-v2";
 
-const ollama = new OllamaService(model, endpoint);
-const embedFn = (texts: string[]) => ollama.embedTexts(texts);
+const svcCtx = createOllamaContext({ ollama: { endpoint, model } });
+const embedFn = (texts: string[]) => embedTexts(svcCtx, texts);
 
 test("CosineDropChunker with Ollama embeddings (text + markdown)", async () => {
-  const chunker = new CosineDropChunker(embedFn);
-  (chunker as any).logger = logger;
 
   for (const { label, file, out, mode } of fixtures) {
     const raw = await Bun.file(file).text();
 
     const chunks =
       mode === "markdown"
-        ? await chunker.chunk(raw, {
+        ? await cosineDropChunker({ logger, embed: embedFn, pipeline: { retries: 0, timeout: 0 } } as any, raw, {
             bufferSize: 2,
             breakPercentile: 90,
             minChunkSize: 30,
@@ -44,13 +41,14 @@ test("CosineDropChunker with Ollama embeddings (text + markdown)", async () => {
             overlapSize: 0,
             type: "markdown",
           })
-        : await chunker.chunk(raw, { bufferSize: 5, breakPercentile: 90 });
+        : await cosineDropChunker({ logger, embed: embedFn, pipeline: { retries: 0, timeout: 0 } } as any, raw, { bufferSize: 5, breakPercentile: 90 });
 
     const output = chunks
-      .map((chunk, i) => `--- CHUNK ${i + 1} (${label}) ---\n${chunk.trim()}`)
+      .map((chunk: string, i: number) => `--- CHUNK ${i + 1} (${label}) ---\n${chunk.trim()}`)
       .join("\n\n");
 
     await Bun.write(out, output);
     console.log(`✅ ${label.toUpperCase()} → ${chunks.length} chunks → ${out}`);
   }
 }, 1e6);
+
