@@ -17,10 +17,11 @@ Table of contents
 3. withTimeout
 4. withCache
 5. tap
-6. withMultiStrategy
-7. pipeSteps
-8. eventsFromPipeline
-9. pipelineToTransform
+6. withSequence
+7. withAlternatives
+8. pipeSteps
+9. eventsFromPipeline
+10. pipelineToTransform
 
 ---
 
@@ -95,9 +96,9 @@ const sTap = tap<T, Logger>((ctx, doc) => ctx.info?.(`seen ${doc.id}`));
 // type: PipelineStep<T, T, Logger>
 ```
 
-## withMultiStrategy (T → T)
+## withSequence (T → T)
 
-Runs multiple identity steps; short‑circuits on pause; optional `ctx.pipeline.stopCondition(doc)`.
+Sequentially runs identity steps; short‑circuits on pause; optional `stopCondition(doc)` or `ctx.pipeline.stopCondition(doc)`.
 
 ```ts
 type Ctx = Logger & { pipeline?: { stopCondition?: (doc: T) => boolean } };
@@ -105,13 +106,29 @@ type Ctx = Logger & { pipeline?: { stopCondition?: (doc: T) => boolean } };
 const s1: PipelineStep<T, T, Ctx> = /* … */;
 const s2: PipelineStep<T, T, Ctx> = /* … */;
 
-const sMulti = withMultiStrategy<T, Ctx>([s1, s2]);
+const seq = withSequence<T, Ctx>([s1, s2]);
 
-// Optionally:
+// Optional per‑context condition
 ctx.pipeline = { stopCondition: d => d.ready === true };
 ```
 
-If none pause and no stop condition triggers, returns the final doc.
+Unwraps `{done:true, value}` between steps and returns the last value when no stop condition fires.
+
+## withAlternatives (I → O)
+
+Try multiple strategies on the same input; stop when a result is accepted. Pauses propagate immediately; `{done:true, value}` is unwrapped. Acceptance is decided by a provided `stopCondition(out)` or `ctx.pipeline.stopCondition(out)`.
+
+```ts
+type Ctx = Logger & { pipeline?: { stopCondition?: (out: O) => boolean } };
+
+const stratA: PipelineStep<I, O, Ctx> = /* … */;
+const stratB: PipelineStep<I, O, Ctx> = /* … */;
+
+// Stop when output has at least one chunk
+const accept = (out: O) => (out as any).chunks?.length > 0;
+
+const choose = withAlternatives<I, O, Ctx>([stratA, stratB], accept);
+```
 
 ## pipeSteps (T → T)
 

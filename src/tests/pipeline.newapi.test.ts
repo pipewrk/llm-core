@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { pipeline, type PipelineStep, isPipelineOutcome } from "../core/pipeline";
+import { withSequence } from "src/core/helpers";
 
 describe("pipeline (new API)", () => {
   const ctx = { logger: { info() {}, warn() {}, error() {}, attn() {}, impt() {} } } as any;
@@ -48,16 +49,15 @@ describe("pipeline (new API)", () => {
     }
   });
 
-  it("withMultiStrategy runs subs with stopCondition and propagates pause", async () => {
+  it("withSequence runs subs with stopCondition and propagates pause", async () => {
     const pause: PipelineStep<{ s: string }, { s: string }> = () => async () => ({
       done: false,
       reason: "wait",
       payload: {},
     });
-    // Use helpers.withMultiStrategy to compose sub-steps into a single step
-    const { withMultiStrategy } = await import("../core/helpers");
+    // Use helpers.withSequence to compose sub-steps into a single step
     const p = pipeline<typeof ctx, { s: string }>(ctx)
-      .addStep(withMultiStrategy([
+      .addStep(withSequence([
         (_c) => (d) => ({ s: d.s + "1" }),
         pause,
         (_c) => (d) => ({ s: d.s + "2" }),

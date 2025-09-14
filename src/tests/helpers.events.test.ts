@@ -56,5 +56,52 @@ describe("helpers: eventsFromPipeline and pipelineToTransform", () => {
     expect(outputs).toEqual([JSON.stringify({ data: "x1" })]);
     expect(pauses).toBe(1);
   });
-});
 
+  it("pipelineToTransform pushes final done value", async () => {
+    const p = {
+      async next(_doc: { data: string }) {
+        return { done: true as const, value: { data: "final" } };
+      },
+    };
+    const tr = pipelineToTransform(p as any);
+    const outputs: string[] = [];
+    tr.on("data", (buf) => outputs.push(String(buf).trim()));
+    tr.write({ data: "x" });
+    tr.end();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(outputs).toEqual([JSON.stringify({ data: "final" })]);
+  });
+
+  it("pipelineToTransform handles StreamEvent 'done' without pushing data", async () => {
+    let calls = 0;
+    const p = {
+      async next(_doc: { data: string }) {
+        calls++;
+        return { type: "done" } as any;
+      },
+    };
+    const tr = pipelineToTransform(p as any);
+    const outputs: string[] = [];
+    tr.on("data", (buf) => outputs.push(String(buf).trim()));
+    tr.write({ data: "x" });
+    tr.end();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(outputs).toEqual([]);
+    expect(calls).toBe(1);
+  });
+
+  it("pipelineToTransform forwards errors from next() to 'error' event", async () => {
+    const p = {
+      async next() {
+        throw new Error("boom");
+      },
+    };
+    const tr = pipelineToTransform(p as any);
+    const errors: string[] = [];
+    tr.on("error", (e) => errors.push((e as Error).message));
+    tr.write({});
+    tr.end();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(errors[0]).toBe("boom");
+  });
+});

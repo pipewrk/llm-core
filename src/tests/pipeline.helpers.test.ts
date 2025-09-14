@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { ILogger } from "../types/dataset";
-import type { PipelineOutcome, PipelineStep, StreamEvent } from "../core/pipeline";
-import { pipeline, isPipelineOutcome } from "../core/pipeline";
+import type { PipelineOutcome, PipelineStep } from "../core/pipeline";
+import { pipeline } from "../core/pipeline";
 import { MockLogger } from "./logger.mock";
-import { appendStep, uppercaseStep } from "./steps.mock";
 import { setEnv } from "../core/env";
-import { withErrorHandling, withRetry, withTimeout, withCache, tap, withMultiStrategy, pipeSteps } from "../core/helpers";
+import { withErrorHandling, withRetry, withTimeout, withCache, tap, withSequence, pipeSteps, withAlternatives } from "../core/helpers";
 
 describe("Helper Function Tests", () => {
   let logger: MockLogger;
@@ -258,7 +257,7 @@ describe("Helper Function Tests", () => {
     });
   });
 
-  describe("withMultiStrategy", () => {
+  describe("withSequence", () => {
     it("run stops when stopCondition is met", async () => {
       const sub1: PipelineStep<{ data: string }, { data: string }> = () => (doc: { data: string }) => ({
         data: doc.data + "1",
@@ -268,7 +267,7 @@ describe("Helper Function Tests", () => {
       });
 
       ctx.pipeline.stopCondition = (doc: { data: string }) => doc.data.endsWith("1");
-      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withMultiStrategy([sub1, sub2]));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withSequence([sub1, sub2]));
 
       const result = await p.run({ data: "X" });
       expect(result.data).toBe("X1");
@@ -283,13 +282,122 @@ describe("Helper Function Tests", () => {
       });
 
       ctx.pipeline.stopCondition = (doc: { data: string }) => doc.data.includes("AB");
-      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withMultiStrategy([sub1, sub2]));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withSequence([sub1, sub2]));
 
       const seen: string[] = [];
       for await (const evt of p.stream({ data: "Z" })) {
         if (evt.type === "progress") seen.push(evt.doc.data);
       }
       expect(seen).toEqual(["ZAB"]);
+    });
+
+    it("propagates done=true value and continues with next strategy", async () => {
+      const sub1: PipelineStep<{ data: string }, { data: string }> = () => async (doc) => ({
+        done: true,
+        value: { data: doc.data + "X" },
+      });
+      const sub2: PipelineStep<{ data: string }, { data: string }> = () => async (doc) => ({
+        data: doc.data + "Y",
+      });
+
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withSequence([sub1, sub2]));
+      const result = await p.run({ data: "_" });
+      expect(result.data).toBe("_XY");
+    });
+  });
+
+  describe("withAlternatives", () => {
+    it("uses the first acceptable strategy via explicit stopCondition", async () => {
+      const s1: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "A" });
+      const s2: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "B" });
+
+      const accept = (out: { data: string }) => out.data.endsWith("A");
+      const p = pipeline<typeof ctx, { data: string }>(ctx)
+        .addStep(withAlternatives([s1, s2], accept));
+
+      const result = await p.run({ data: "X" });
+      expect(result.data).toBe("XA"); // s1 accepted; s2 never runs
+    });
+
+    it("falls back to ctx.pipeline.stopCondition when none is provided", async () => {
+      const s1: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "1" });
+      const s2: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "2" });
+
+      ctx.pipeline.stopCondition = (out: { data: string }) => out.data.includes("2");
+      const p = pipeline<typeof ctx, { data: string }>(ctx)
+        .addStep(withAlternatives([s1, s2]));
+
+      const res = await p.run({ data: "A" });
+      // s1 => "A1" (not accepted), s2 => "A12" (accepted)
+      expect(res.data).toBe("A12");
+    });
+
+    it("propagates a pause from a strategy without running later ones", async () => {
+      const pause: PipelineStep<{ data: string }, { data: string }> =
+        () => async (_doc) =>
+          ({ done: false, reason: "error", payload: { data: "ignored" } });
+
+      const never: PipelineStep<{ data: string }, { data: string }> =
+        () => (_doc) => ({ data: "SHOULD_NOT_RUN" });
+
+      const p = pipeline<typeof ctx, { data: string }>(ctx)
+        .addStep(withAlternatives([pause, never], () => true));
+
+      const res = await p.next({ data: "_" });
+
+      // res is a StreamEvent, not a raw PipelineOutcome
+      if ("type" in res && res.type === "pause") {
+        const info = res.info as Extract<PipelineOutcome<{ data: string }>, { done: false }>;
+        expect(info.reason).toBe("error");
+      } else {
+        throw new Error("Expected a pause event");
+      }
+    });
+
+    it("promotes {done:true, value} output and can still try next strategy if not accepted", async () => {
+      const s1: PipelineStep<{ data: string }, { data: string }> =
+        () => async (doc) => ({ done: true, value: { data: doc.data + "X" } });
+      const s2: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "Y" });
+
+      const accept = (out: { data: string }) => out.data.endsWith("Y");
+      const p = pipeline<typeof ctx, { data: string }>(ctx)
+        .addStep(withAlternatives([s1, s2], accept));
+
+      const res = await p.run({ data: "_" });
+      // s1 yields "_X" (not accepted) → s2 yields "_XY" (accepted)
+      expect(res.data).toBe("_XY");
+    });
+
+    it("returns the last successful output if no strategy meets the stopCondition", async () => {
+      const s1: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "A" });
+      const s2: PipelineStep<{ data: string }, { data: string }> =
+        () => (doc) => ({ data: doc.data + "B" });
+
+      const neverAccept = () => false;
+      const p = pipeline<typeof ctx, { data: string }>(ctx)
+        .addStep(withAlternatives([s1, s2], neverAccept));
+
+      const res = await p.run({ data: "Z" });
+      // neither accepted → last output wins ("ZAB")
+      expect(res.data).toBe("ZAB");
+    });
+  });
+
+  describe("pipeSteps done=true propagation", () => {
+    it("uses done=true value as input to subsequent steps", async () => {
+      const s1: PipelineStep<string, string, typeof ctx> = () => async (doc) => ({ done: true, value: doc + "A" });
+      const s2: PipelineStep<string, string, typeof ctx> = () => async (doc) => doc + "B";
+
+      const piped = pipeSteps<string, typeof ctx>(s1, s2);
+      const p = pipeline<typeof ctx, string>(ctx).addStep(piped);
+      const result = await p.run("_");
+      expect(result).toBe("_AB");
     });
   });
 });
