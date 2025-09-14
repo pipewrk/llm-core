@@ -96,6 +96,8 @@ That’s it, once your environment is configured, you’re ready to import only 
 
 ## Core Modules
 
+Overview of the main building blocks you’ll use in applications.
+
 ### `pipeline`
 
 The `pipeline` module provides a lightweight, context‑based way to orchestrate data‑processing workflows. You provide a single context object which can be your `logger`, `counters`, `cache` or any other shared state. You then build the pipeline by chaining curried steps: 
@@ -272,6 +274,8 @@ async function chunkMyMarkdown() {
 For a deep dive into semantic chunking and all configuration options, see the **[Semantic Chunker Developer Guide](./CHUNKER.md)**.
 
 ## Development
+
+Guides for building, testing, and releasing this project.
 
 ### Building the Project
 

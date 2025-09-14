@@ -1,168 +1,131 @@
 ## Pipeline Helpers Reference
 
-The pipeline core is intentionally minimal: it orchestrates the flow of a document and its context through a series of steps. Cross‑cutting concerns (retries, timeouts, caching, logging, compositional strategies, event emission and stream integration) are implemented as **helpers**. This document summarises each helper exported from `src/core/helpers.ts` and how to use them.
+The pipeline core is intentionally minimal: it orchestrates a document through a sequence of steps that all share a bound context object. Cross‑cutting concerns (retries, timeouts, caching, logging, composition, and integrations) live in `src/core/helpers.ts`.
 
-There are two helper categories:
+Shape recap
 
-- Step wrappers: operate on `PipelineStep<T, T>` (e.g. `withRetry`, `withTimeout`, `withCache`, `withErrorHandling`, `tap`, `withMultiStrategy`). Use these directly inside `.addStep(...)`.
-- Transformer composition: `pipe` and `compose` operate on a separate `Transformer<C, T>` shape: `(ctx, doc) → [ctx, doc | PipelineOutcome<T>] | Promise<...>`. These are useful when composing outside a pipeline or stitching wrappers together.
+```
+type PipelineStep<I, O, C> = (ctx: C) => (doc: I) => Promise<O | PipelineOutcome<O>>
+```
 
-## Table of contents
+All helpers preserve generics exactly: `<I, O, C>` stays the same after wrapping.
 
-1. [pipe](#pipe)
-2. [withErrorHandling](#witherrorhandling)
-3. [withRetry](#withretry)
-4. [withTimeout](#withtimeout)
-5. [withCache](#withcache)
-6. [tap](#tap)
-7. [withMultiStrategy](#withmultistrategy)
-8. [eventsFromPipeline](#eventsfrompipeline)
-9. [pipelineToTransform](#pipelinetotransform)
+Table of contents
+
+1. withErrorHandling
+2. withRetry
+3. withTimeout
+4. withCache
+5. tap
+6. withMultiStrategy
+7. pipeSteps
+8. eventsFromPipeline
+9. pipelineToTransform
 
 ---
 
-## pipe(...transforms)
+## withErrorHandling
 
-Combine multiple transformers into one. Each transformer has the signature `(ctx, T) → [ctx, T | PipelineOutcome<T>]` or a promise of that tuple. When composed, the transformers run in sequence until either all complete or one returns a pause outcome. Synchronous and asynchronous transformers can be mixed freely. Comes in `pipe` and `compose` variants.
+Wraps a step; catches throws and returns a pause `{ done: false, reason: 'error' }`.
 
 ```ts
-import { pipe, compose, Transformer } from '@jasonnathan/llm-core';
+const sFetch: PipelineStep<Input, Output, Logger> = (ctx) => async (doc) => {
+  // may throw
+  return fetchAndParse(doc);
+};
 
-const a: Transformer<Ctx, Doc> = async (ctx, doc) => { /* ... */ };
-const b: Transformer<Ctx, Doc> = async (ctx, doc) => { /* ... */ };
-
-// you can use compose(a, b) here as well, which runs b → a
-const ab = pipe(a, b);
-const [newCtx, result] = await ab(ctx, doc);
+const sSafe = withErrorHandling(sFetch);
+// type: PipelineStep<Input, Output, Logger>
 ```
 
-Use this when writing custom transformers or combining helper wrappers outside of a pipeline context.
+## withRetry
 
-## withErrorHandling(step)
-
-Wrap a step so that any thrown exception becomes a pause. The returned step catches exceptions from the original step and returns `{ done: false, reason: 'error', payload: doc }` without mutating the context.
+Retries only on `{ done:false, reason:'error' }` up to `ctx.pipeline?.retries`.
 
 ```ts
-import { withErrorHandling } from "@jasonnathan/llm-core";
+type Ctx = Logger & { pipeline?: { retries?: number } };
 
-// A step that may throw
-const flaky: PipelineStep<Doc, Doc, Ctx & { error?: unknown }> =
-  (ctx) => async (doc) => {
-    if (Math.random() < 0.5) throw new Error("Boom");
-    return doc;
-  };
+const sFlaky: PipelineStep<T, T, Ctx> = (ctx) => async (doc) => {
+  // may pause with reason:'error'
+  return maybeFlaky(doc);
+};
 
-const safe = withErrorHandling(flaky);
+const sRetried = withRetry(sFlaky);
+// set per-run:
+const ctx: Ctx = Object.assign(new Logger('./log.md'), { pipeline: { retries: 2 } });
 ```
 
-When the pipeline encounters a pause with reason `'error'`, you can decide whether to retry, log and continue, or abort.
+## withTimeout
 
-## withRetry(step, retries = 3)
-
-Attempt to run a step multiple times when it pauses due to an error. The number of retries is taken from `ctx.pipeline.retries` (default `0`). Only pauses with `reason === 'error'` are retried; other pauses are propagated immediately.
+Races a step against `ctx.pipeline?.timeout` (ms). On timeout → `{ done:false, reason:'timeout' }`.
 
 ```ts
-import { withRetry } from '@jasonnathan/llm-core';
+type Ctx = Logger & { pipeline?: { timeout?: number } };
 
-interface RetryCtx { pipeline: { retries?: number } }
-
-const ctx: RetryCtx = { pipeline: { retries: 5 } };
-
-const flakyStep = withRetry(flaky);
-pipeline(ctx).addStep(flakyStep);
-```
-
-If the retry limit is exceeded, the wrapper returns a pause with reason `'retryExceeded'`.
-
-## withTimeout(step, ms)
-
-Add a timeout to a step. The timeout duration (in milliseconds) is read from `ctx.pipeline.timeout`. If the step does not complete within this time, the helper returns a pause `{ done: false, reason: 'timeout', payload: doc }`. It does not cancel the underlying work.
-
-```ts
-import { withTimeout } from '@jasonnathan/llm-core';
-
-interface TimeoutCtx { pipeline: { timeout: number } }
-
-const slow: PipelineStep<Doc, Doc, TimeoutCtx> = () => async (doc) => {
-  await new Promise((res) => setTimeout(res, 10_000));
+const sSlow: PipelineStep<T, T, Ctx> = (ctx) => async (doc) => {
+  await sleep(5000);
   return doc;
 };
 
-const guarded = withTimeout(slow);
-
-// Example context with a 2‑second timeout
-const ctx: TimeoutCtx = { pipeline: { timeout: 2000 } };
-
-pipeline(ctx).addStep(guarded);
-
+const sTimed = withTimeout(sSlow);
+// ctx.pipeline.timeout = 1000 → pause('timeout')
 ```
 
-## withCache(step, keyFn)
+## withCache (T → T)
 
-Memoise a step’s result based on a key derived from the document. Results are stored in `ctx.pipeline.cache` if provided. Only successful results (non‑pauses) are cached; if no cache is configured, the step runs normally.
+Caches successful (non‑pause) results in `ctx.pipeline?.cache` by key.
 
 ```ts
-import { withCache } from '@jasonnathan/llm-core';
+type Ctx = Logger & { pipeline?: { cache?: Map<unknown, unknown> } };
 
-// Context must include a `cache` property for caching to work
-interface MyCtx { pipeline: { cache?: Map<any, unknown> } }
-
-const expensive: PipelineStep<Doc, Doc, MyCtx> = (ctx) => async (doc) => {
-  // simulate expensive call
-  return { ...doc, data: await fetchSomething(doc.id) };
+const sExpensive: PipelineStep<T, T, Ctx> = (ctx) => async (doc) => {
+  return await heavyCompute(doc);
 };
 
-// Wrap with caching; derive keys from the document
-const cachedExpensive = withCache(expensive, (doc) => doc.id);
-
-// Create context with a cache Map and other fields
-const ctx: MyCtx = { pipeline: { cache: new Map() } };
-
-pipeline(ctx).addStep(cachedExpensive);
+const sCached = withCache(sExpensive, d => d.id);
+// ctx.pipeline.cache = new Map()
 ```
 
-Initialize `ctx.cache = new Map()` before using this helper.
+## tap (T → T)
 
-## tap(sideEffect)
-
-Create a step that executes a side effect and returns the document unchanged. Ideal for logging, tracing or metrics.
+Side‑effect; forwards doc unchanged.
 
 ```ts
-import { tap } from "@jasonnathan/llm-core";
-
-const logStep = tap<Ctx, Doc>((ctx, doc) => {
-  ctx.logger.info("Doc ID", doc.id);
-});
-
-pipeline(ctx).addStep(logStep);
+const sTap = tap<T, Logger>((ctx, doc) => ctx.info?.(`seen ${doc.id}`));
+// type: PipelineStep<T, T, Logger>
 ```
 
-## withMultiStrategy(subSteps, stopCondition?)
-Compose multiple steps into one. Runs each sub‑step in order until one pauses or the optional `ctx.pipeline.stopCondition(doc)` returns `true`.
+## withMultiStrategy (T → T)
+
+Runs multiple identity steps; short‑circuits on pause; optional `ctx.pipeline.stopCondition(doc)`.
 
 ```ts
-import { withMultiStrategy } from '@jasonnathan/llm-core';
+type Ctx = Logger & { pipeline?: { stopCondition?: (doc: T) => boolean } };
 
-interface MultiCtx { pipeline: { stopCondition?: (doc: Doc) => boolean } }
+const s1: PipelineStep<T, T, Ctx> = /* … */;
+const s2: PipelineStep<T, T, Ctx> = /* … */;
 
-const strategy1: PipelineStep<Doc, Doc, MultiCtx> = …;
-const strategy2: PipelineStep<Doc, Doc, MultiCtx> = …;
-const strategy3: PipelineStep<Doc, Doc, MultiCtx> = …;
+const sMulti = withMultiStrategy<T, Ctx>([s1, s2]);
 
-const multi = withMultiStrategy([strategy1, strategy2, strategy3]);
-
-// Provide a stop condition via context
-const ctx: MultiCtx = { pipeline: { stopCondition: (doc) => !!doc.result } };
-
-pipeline(ctx).addStep(multi);
-
+// Optionally:
+ctx.pipeline = { stopCondition: d => d.ready === true };
 ```
 
-If none of the strategies pause and the stop condition never triggers, the result of the last strategy is returned.
+If none pause and no stop condition triggers, returns the final doc.
 
-Note: The pipeline no longer exposes `addMultiStrategyStep`; prefer `withMultiStrategy([...])` inside `.addStep(...)` as shown above.
+## pipeSteps (T → T)
 
-## eventsFromPipeline(p, initial)
+Functional compose for identity steps (left→right). Short‑circuits on pause.
+
+```ts
+const s = pipeSteps<T, Logger>(
+  tap((ctx, d) => ctx.info?.('start')),
+  withErrorHandling(someIdentityStep),
+  withTimeout(anotherIdentityStep as PipelineStep<T, T, Logger>),
+);
+```
+
+## eventsFromPipeline
 
 Wrap a pipeline so you can listen to progress and pause events. Returns an `EventEmitter` that emits strongly‑typed events:
 
@@ -184,7 +147,7 @@ emitter.on("done", () => console.log("finished"));
 
 This is useful for UI integration or monitoring long‑running pipelines.
 
-## pipelineToTransform(p, onPause?)
+## pipelineToTransform
 
 Convert a pipeline into a Node.js `Transform` stream. Each object written to the transform is processed through the pipeline using `p.next(doc, resume)`. Normal results are pushed downstream as newline‑delimited JSON; pauses trigger the optional `onPause` handler and stop processing of the current chunk. The transform carries a resume token internally so subsequent progress starts from the correct step.
 
@@ -204,3 +167,27 @@ createReadStream("in.ndjson", { encoding: "utf8", objectMode: true })
 ```
 
 If you don’t provide `onPause`, the transform still stops processing the current chunk on a pause; it’s up to the caller to decide when to resume or re‑enqueue.
+
+## Real‑world snippet
+
+Tying it together with retries, timeout, cache and tap:
+
+```ts
+type Ctx = Logger & { pipeline?: { retries?: number; timeout?: number; cache?: Map<unknown,unknown> } };
+
+const stepFetch: PipelineStep<Input, Mid, Ctx> = /* … */;
+const stepProcess: PipelineStep<Mid, Mid, Ctx> = /* … */;
+const stepFinal: PipelineStep<Mid, Final, Ctx> = /* … */;
+
+const ctx: Ctx = Object.assign(new Logger('./run.md'), {
+  pipeline: { retries: 2, timeout: 1500, cache: new Map() }
+});
+
+const p = pipeline<Ctx, Input>(ctx)
+  .addStep(withRetry(withErrorHandling(stepFetch)))      // I: Input → O: Mid
+  .addStep(withCache(withTimeout(stepProcess), m => m.key)) // Mid → Mid
+  .addStep(tap<Mid, Ctx>((c, d) => c.info?.(`mid: ${d.key}`)))
+  .addStep(stepFinal);                                   // Mid → Final
+
+const result = await p.run(initialInput);
+```

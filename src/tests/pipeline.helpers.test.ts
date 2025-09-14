@@ -5,16 +5,7 @@ import { pipeline, isPipelineOutcome } from "../core/pipeline";
 import { MockLogger } from "./logger.mock";
 import { appendStep, uppercaseStep } from "./steps.mock";
 import { setEnv } from "../core/env";
-import {
-  pipe,
-  compose,
-  withErrorHandling,
-  withRetry,
-  withTimeout,
-  withCache,
-  tap,
-  withMultiStrategy,
-} from "../core/helpers";
+import { withErrorHandling, withRetry, withTimeout, withCache, tap, withMultiStrategy, pipeSteps } from "../core/helpers";
 
 describe("Helper Function Tests", () => {
   let logger: MockLogger;
@@ -32,103 +23,66 @@ describe("Helper Function Tests", () => {
     };
   });
 
-  describe("pipe transformer", () => {
-    it("runs all transformers in sequence when none pause", async () => {
+  describe("pipeSteps (identity composition)", () => {
+    it("runs all identity steps left-to-right when none pause", async () => {
       type Ctx = { count: number };
 
-      const t1 = (ctx: Ctx, doc: string): [Ctx, string] => {
-        return [{ count: ctx.count + 1 }, doc + "A"];
+      const ctx2: Ctx = { count: 0 };
+      const t1: PipelineStep<string, string, Ctx> = (c) => (doc) => {
+        c.count += 1;
+        return doc + "A";
       };
 
-      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
-        return [{ count: ctx.count + 2 }, doc + "B"];
+      const t2: PipelineStep<string, string, Ctx> = (c) => (doc) => {
+        c.count += 2;
+        return doc + "B";
       };
 
-      const piped = pipe<Ctx, string>(t1, t2);
-      const [newCtx, result] = await piped({ count: 0 }, "X");
+      const piped = pipeSteps<string, Ctx>(t1, t2);
+      const p = pipeline<Ctx, string>(ctx2).addStep(piped);
+      const result = await p.run("X");
 
-      expect(newCtx.count).toBe(3);
+      expect(ctx2.count).toBe(3);
       expect(result).toBe("XAB");
     });
 
     it("short‑circuits and propagates a pause outcome", async () => {
       type Ctx = { count: number };
+      const ctx2: Ctx = { count: 0 };
 
-      const t1 = (_: Ctx, doc: string): [Ctx, PipelineOutcome<string>] => {
+      const t1: PipelineStep<string, string, Ctx> = () => async (doc) => {
         const outcome: PipelineOutcome<string> = {
           done: false,
           reason: "halt",
           payload: doc,
         };
-        return [{ count: 0 }, outcome];
+        return outcome;
       };
 
-      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
-        return [{ count: ctx.count + 10 }, doc + "Z"];
+      const t2: PipelineStep<string, string, Ctx> = (c) => (doc) => {
+        c.count += 10;
+        return doc + "Z";
       };
 
-      const piped = pipe<Ctx, string>(t1, t2);
-      const [newCtx, result] = await piped({ count: 0 }, "X");
+      const piped = pipeSteps<string, Ctx>(t1, t2);
+      const p = pipeline<Ctx, string>(ctx2).addStep(piped);
 
-      expect(newCtx.count).toBe(0);
-      expect(isPipelineOutcome(result)).toBe(true);
-      if (isPipelineOutcome(result) && !result.done) {
-        expect(result.reason).toBe("halt");
-        expect(result.payload).toBe("X");
-      } else {
-        throw new Error("Expected a pause outcome");
+      let paused = false;
+      for await (const evt of p.stream("X")) {
+        if (evt.type === "pause") {
+          paused = true;
+          const outcome = evt.info as Extract<PipelineOutcome<string>, { done: false }>;
+          expect(outcome.reason).toBe("halt");
+          expect(outcome.payload).toBe("X");
+          break;
+        }
       }
+      expect(paused).toBe(true);
+      expect(ctx2.count).toBe(0);
     });
   });
 
-  describe("compose transformer", () => {
-    it("runs all transformers in sequence when none pause", async () => {
-      type Ctx = { count: number };
-
-      const t1 = (ctx: Ctx, doc: string): [Ctx, string] => {
-        return [{ count: ctx.count + 1 }, doc + "A"];
-      };
-
-      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
-        return [{ count: ctx.count + 2 }, doc + "B"];
-      };
-
-      const composed = compose<Ctx, string>(t1, t2);
-      const [newCtx, result] = await composed({ count: 0 }, "X");
-
-      expect(newCtx.count).toBe(3);
-      expect(result).toBe("XBA");
-    });
-
-    it("short‑circuits and propagates a pause outcome", async () => {
-      type Ctx = { count: number };
-
-      const t1 = (_: Ctx, doc: string): [Ctx, PipelineOutcome<string>] => {
-        const outcome: PipelineOutcome<string> = {
-          done: false,
-          reason: "halt",
-          payload: doc,
-        };
-        return [{ count: 0 }, outcome];
-      };
-
-      const t2 = (ctx: Ctx, doc: string): [Ctx, string] => {
-        return [{ count: ctx.count + 10 }, doc + "Z"];
-      };
-
-      const composed = compose<Ctx, string>(t1, t2);
-      const [newCtx, result] = await composed({ count: 0 }, "X");
-
-      expect(newCtx.count).toBe(0);
-      expect(isPipelineOutcome(result)).toBe(true);
-      if (isPipelineOutcome(result) && !result.done) {
-        expect(result.reason).toBe("halt");
-        expect(result.payload).toBe("XZ");
-      } else {
-        throw new Error("Expected a pause outcome");
-      }
-    });
-  });
+  // compose() helper removed in favor of pipeSteps for identity steps
 
 
   describe("withErrorHandling", () => {
@@ -204,21 +158,21 @@ describe("Helper Function Tests", () => {
   });
 
   describe("withTimeout", () => {
-    it("run pauses immediately when timeout=0", async () => {
+    it("run does not time out when timeout=0 (disabled)", async () => {
       const slow: PipelineStep<{ data: string }, { data: string }> = () => () =>
         new Promise((res) => setTimeout(() => res({ data: "late" }), 10));
 
-      ctx.pipeline.timeout = 0;
+      ctx.pipeline.timeout = 0; // disabled
       const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withTimeout(slow));
       const result = await p.run({ data: "init" });
-      expect(result.data).toBe("init");
+      expect(result.data).toBe("late");
     });
 
     it("stream yields timeout pause", async () => {
       const slow: PipelineStep<{ data: string }, { data: string }> = () => () =>
         new Promise((res) => setTimeout(() => res({ data: "late" }), 10));
 
-      ctx.pipeline.timeout = 0;
+      ctx.pipeline.timeout = 1; // shorter than step delay
       const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withTimeout(slow));
       for await (const evt of p.stream({ data: "in" })) {
         if (evt.type === "pause") {
@@ -276,7 +230,7 @@ describe("Helper Function Tests", () => {
   describe("tap helper", () => {
     it("run executes side effect and leaves doc unchanged", async () => {
       let called = 0;
-      const t = tap<typeof ctx, { data: string }>((c, d) => {
+      const t = tap<{ data: string }, typeof ctx>((c, d) => {
         called++;
         c.logger.info("tapped");
       });
@@ -290,7 +244,7 @@ describe("Helper Function Tests", () => {
 
     it("stream yields progress event without altering doc", async () => {
       let called = 0;
-      const t = tap<typeof ctx, { data: string }>((c, d) => {
+      const t = tap<{ data: string }, typeof ctx>((c, d) => {
         called++;
       });
 

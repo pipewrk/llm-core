@@ -38,6 +38,8 @@ sequenceDiagram
 
 ## API Reference & Usage
 
+How to initialize the client, call high‑level methods, and handle structured results.
+
 ### Initialization
 
 First, ensure your environment variables are set up in a `.env` file. The service will automatically pick them up.

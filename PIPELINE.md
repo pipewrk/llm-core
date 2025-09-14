@@ -92,7 +92,11 @@ for await (const evt of p.stream({ text: " hello " })) {
 
 ## API Reference & Usage
 
+This section describes the core types, factory methods, and streaming interfaces you use to build and drive pipelines.
+
 ### Core Types
+
+Fundamental shapes used across steps, helpers, and the streaming API.
 
 #### Context
 
@@ -124,6 +128,8 @@ export type PipelineStep<I, O, C = unknown> =
 ---
 
 ### Pipeline Factory
+
+Create and extend pipelines by binding a context once and appending steps.
 
 #### `pipeline<C, T>(ctx: C): Pipeline<C, T>`
 
@@ -199,8 +205,7 @@ export type StreamEvent<T> =
 
 A suite of ready‑made wrappers lives in **`src/core/helpers.ts`** (see `PIPELINE_HELPERS.md`):
 
-- Step wrappers: `withErrorHandling`, `withRetry`, `withTimeout`, `withCache`, `tap`, `withMultiStrategy`
-- Transformer composition: `pipe`, `compose` (work on `(ctx, doc) -> [ctx, doc | PipelineOutcome]`)
+- Step wrappers: `withErrorHandling`, `withRetry`, `withTimeout`, `withCache`, `tap`, `withMultiStrategy`, `pipeSteps`
 - Integrations: `eventsFromPipeline`, `pipelineToTransform`
 
 ---
