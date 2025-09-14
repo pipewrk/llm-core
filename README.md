@@ -180,8 +180,8 @@ const ctx: Ctx = {
 };
 
 // 2) Define steps; each is (ctx) => (doc) => T | PipelineOutcome<T>
-const collectContentStep: PipelineStep<QuestionDoc[], QuestionDoc[]> = (ctx) => async (docs) => {
-  (ctx as Ctx).logger.info("Collecting content…");
+const collectContentStep: PipelineStep<QuestionDoc[], QuestionDoc[], Ctx> = (ctx) => async (docs) => {
+  ctx.logger.info("Collecting content…");
   return [
     ...docs,
     { source: "doc1.md", content: "Pipelines are great.", questions: [] },
@@ -189,8 +189,8 @@ const collectContentStep: PipelineStep<QuestionDoc[], QuestionDoc[]> = (ctx) => 
   ];
 };
 
-const generateQuestionsStep: PipelineStep<QuestionDoc[], QuestionDoc[]> = (ctx) => async (docs) => {
-  (ctx as Ctx).logger.info("Generating questions…");
+const generateQuestionsStep: PipelineStep<QuestionDoc[], QuestionDoc[], Ctx> = (ctx) => async (docs) => {
+  ctx.logger.info("Generating questions…");
   return docs.map((doc) => ({
     ...doc,
     questions: [`What is the main point of ${doc.source}?`],

@@ -10,9 +10,9 @@ export function isPipelineOutcome<T>(v: unknown): v is PipelineOutcome<T> {
   return typeof v === "object" && v !== null && "done" in (v as Record<string, unknown>);
 }
 
-/** Step: (context) => (doc: I) => O | Outcome<O> | Promise<…> */
-export type PipelineStep<I, O> =
-  (context: unknown) => (doc: I) => MaybePromise<O | PipelineOutcome<O>>;
+/** Step: (context) => (doc: I) => O | Outcome<O> | Promise<…>  */
+export type PipelineStep<I, O, C = unknown> =
+  (context: C) => (doc: I) => MaybePromise<O | PipelineOutcome<O>>;
 
 export type ResumeState<T> = { nextStep: number; doc: T };
 
@@ -23,40 +23,47 @@ export type StreamEvent<T> =
 
 /** Public surface: input fixed to TInit; output evolves with steps. */
 export interface Pipeline<C, TInit, O = TInit> {
-  addStep<N>(step: PipelineStep<O, N>): Pipeline<C, TInit, N>;
+  addStep<N>(step: PipelineStep<O, N, C>): Pipeline<C, TInit, N>;
   run(doc: TInit): Promise<O>;
   stream(doc: TInit, resume?: ResumeState<TInit>): AsyncGenerator<StreamEvent<O>, O, void>;
   next(doc: TInit, resume?: ResumeState<TInit>): Promise<StreamEvent<O> | { done: true; value: O }>;
 }
 
-/** Factory — binds a single context; no opts. */
+/** Factory - binds a single context; no opts. */
 export function pipeline<C, TInit>(ctx: C): Pipeline<C, TInit> {
-  const steps: PipelineStep<any, any>[] = [];
-  const boundCtx: unknown = ctx;
+  // store hetero steps erased to a common callable; context is strongly C
+  const steps: PipelineStep<any, any, C>[] = [];
+  const boundCtx: C = ctx;
 
-  // Lightweight logger discovery from ctx
-  const log = ((): { info?: (s: string)=>void; warn?: (s: string)=>void; error?: (e: unknown)=>void } => {
+  // optional logger discovery from ctx (works if ctx is a Logger or has .logger)
+  const log = (() => {
     const anyCtx = ctx as any;
     const logger = anyCtx?.logger ?? anyCtx;
     return {
-      info : logger?.info?.bind(logger),
-      warn : logger?.warn?.bind(logger),
-      error: logger?.error?.bind(logger),
+      info : logger?.info?.bind(logger) as ((s: string) => void) | undefined,
+      warn : logger?.warn?.bind(logger) as ((s: string) => void) | undefined,
+      error: logger?.error?.bind(logger) as ((e: unknown) => void) | undefined,
     };
   })();
 
-  /** Internal engine typed to the *current* doc type. */
+  /** Internal engine typed to the *current* doc type AND the bound context C. */
   interface Engine<TCurrent> {
-    addStep<N>(step: PipelineStep<TCurrent, N>): Engine<N>;
+    addStep<N>(step: PipelineStep<TCurrent, N, C>): Engine<N>;
     run(doc: TCurrent): Promise<TCurrent>;
-    stream(doc: TCurrent, resume?: ResumeState<TCurrent>): AsyncGenerator<StreamEvent<TCurrent>, TCurrent, void>;
-    next(doc: TCurrent, resume?: ResumeState<TCurrent>): Promise<StreamEvent<TCurrent> | { done: true; value: TCurrent }>;
+    stream(
+      doc: TCurrent,
+      resume?: ResumeState<TCurrent>
+    ): AsyncGenerator<StreamEvent<TCurrent>, TCurrent, void>;
+    next(
+      doc: TCurrent,
+      resume?: ResumeState<TCurrent>
+    ): Promise<StreamEvent<TCurrent> | { done: true; value: TCurrent }>;
   }
 
   function makeEngine<TCurrent>(): Engine<TCurrent> {
     return {
-      addStep<N>(step: PipelineStep<TCurrent, N>): Engine<N> {
-        steps.push(step as PipelineStep<any, any>);
+      addStep<N>(step: PipelineStep<TCurrent, N, C>): Engine<N> {
+        steps.push(step as PipelineStep<any, any, C>);
         return makeEngine<N>();
       },
 
@@ -82,7 +89,7 @@ export function pipeline<C, TInit>(ctx: C): Pipeline<C, TInit> {
             res = await steps[index](boundCtx)(current);
           } catch (err) {
             log.error?.(err);
-            res = current;
+            res = current; // continue on error
           }
 
           if (isPipelineOutcome<TCurrent>(res)) {
@@ -116,12 +123,13 @@ export function pipeline<C, TInit>(ctx: C): Pipeline<C, TInit> {
   /** Public façade: fixes input at TInit; output evolves with steps. */
   function makeApi<OCurrent>(eng: Engine<OCurrent>): Pipeline<C, TInit, OCurrent> {
     return {
-      addStep<N>(step: PipelineStep<OCurrent, N>): Pipeline<C, TInit, N> {
-        const nextEng = eng.addStep(step);
+      addStep<N>(step: PipelineStep<OCurrent, N, C>): Pipeline<C, TInit, N> {
+        const nextEng = eng.addStep(step);   // <-- now expects C, matches
         return makeApi<N>(nextEng);
       },
+
       run(doc: TInit): Promise<OCurrent> {
-        // First step in eng accepts TInit at runtime; safe boundary cast here.
+        // Safe boundary: first step accepts TInit at runtime.
         return eng.run(doc as unknown as OCurrent) as Promise<OCurrent>;
       },
 
@@ -141,6 +149,5 @@ export function pipeline<C, TInit>(ctx: C): Pipeline<C, TInit> {
     };
   }
 
-  // start with input === output === TInit
   return makeApi<TInit>(makeEngine<TInit>());
 }

@@ -46,7 +46,7 @@ Wrap a step so that any thrown exception becomes a pause. The returned step catc
 import { withErrorHandling } from "@jasonnathan/llm-core";
 
 // A step that may throw
-const flaky: PipelineStep<Ctx & { error?: unknown }, Doc> =
+const flaky: PipelineStep<Doc, Doc, Ctx & { error?: unknown }> =
   (ctx) => async (doc) => {
     if (Math.random() < 0.5) throw new Error("Boom");
     return doc;
@@ -83,7 +83,7 @@ import { withTimeout } from '@jasonnathan/llm-core';
 
 interface TimeoutCtx { pipeline: { timeout: number } }
 
-const slow: PipelineStep<TimeoutCtx, Doc> = () => async (doc) => {
+const slow: PipelineStep<Doc, Doc, TimeoutCtx> = () => async (doc) => {
   await new Promise((res) => setTimeout(res, 10_000));
   return doc;
 };
@@ -107,7 +107,7 @@ import { withCache } from '@jasonnathan/llm-core';
 // Context must include a `cache` property for caching to work
 interface MyCtx { pipeline: { cache?: Map<any, unknown> } }
 
-const expensive: PipelineStep<MyCtx, Doc> = (ctx) => async (doc) => {
+const expensive: PipelineStep<Doc, Doc, MyCtx> = (ctx) => async (doc) => {
   // simulate expensive call
   return { ...doc, data: await fetchSomething(doc.id) };
 };
@@ -145,9 +145,9 @@ import { withMultiStrategy } from '@jasonnathan/llm-core';
 
 interface MultiCtx { pipeline: { stopCondition?: (doc: Doc) => boolean } }
 
-const strategy1: PipelineStep<MultiCtx, Doc> = …;
-const strategy2: PipelineStep<MultiCtx, Doc> = …;
-const strategy3: PipelineStep<MultiCtx, Doc> = …;
+const strategy1: PipelineStep<Doc, Doc, MultiCtx> = …;
+const strategy2: PipelineStep<Doc, Doc, MultiCtx> = …;
+const strategy3: PipelineStep<Doc, Doc, MultiCtx> = …;
 
 const multi = withMultiStrategy([strategy1, strategy2, strategy3]);
 

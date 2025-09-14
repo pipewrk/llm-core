@@ -29,8 +29,8 @@ Each dashed arrow represents a `PipelineOutcome<T>` returned by a step with `don
 A step is a curried function taking your context and returning a transformation function on the document:
 
 ```ts
-type PipelineStep<I, O> = (
-  ctx: unknown
+type PipelineStep<I, O, C = unknown> = (
+  ctx: C
 ) => (doc: I) => O | PipelineOutcome<O> | Promise<O | PipelineOutcome<O>>;
 ```
 
@@ -48,8 +48,8 @@ interface Message {
 }
 
 // Trim whitespace
-const trim: PipelineStep<Message, Message> = (ctx) => (doc) => {
-  (ctx as MsgCtx).logger.info("Trimming text...");
+const trim: PipelineStep<Message, Message, MsgCtx> = (ctx) => (doc) => {
+  ctx.logger.info("Trimming text...");
   return { ...doc, text: doc.text.trim() };
 };
 
@@ -108,13 +108,13 @@ export type PipelineOutcome<T> =
   | { done: true;  value: T };                  // an early “done” that still produces a new doc
 ```
 
-#### `PipelineStep<I, O>`
+#### `PipelineStep<I, O, C = unknown>`
 
 Curried transformer over documents: given a context, returns a function that transforms `I` into `O`, or yields a `PipelineOutcome<O>`.
 
 ```ts
-export type PipelineStep<I, O> =
-  (ctx: unknown) =>
+export type PipelineStep<I, O, C = unknown> =
+  (ctx: C) =>
     (doc: I) =>
       O
       | PipelineOutcome<O>
@@ -139,7 +139,7 @@ const myCtx = {
 const p = pipeline(myCtx);
 ```
 
-#### `addStep(step: PipelineStep<T, N>) → Pipeline<C, T, N>`
+#### `addStep(step: PipelineStep<T, N, C>) → Pipeline<C, T, N>`
 
 Append a single step to the pipeline’s sequence:
 
