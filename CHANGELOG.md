@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/pipewrk/llm-core/compare/v1.6.1...v1.7.0) (2025-09-14)
+
+
+### Features
+
+* **chunker:** refactored ([2d493d1](https://github.com/pipewrk/llm-core/commit/2d493d17059a1516064a393e1f10803cc9ff1dc8))
+* **pipeline helpers:** new helper and tests ([bdc0edf](https://github.com/pipewrk/llm-core/commit/bdc0edf82cd25068af304d88a1dd8712fe7ee43f))
+
 ### [1.6.1](https://github.com/pipewrk/llm-core/compare/v1.6.0...v1.6.1) (2025-09-14)
 
 ## [1.6.0](https://github.com/pipewrk/llm-core/compare/v1.5.1...v1.6.0) (2025-09-14)
