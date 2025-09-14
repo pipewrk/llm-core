@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.1](https://github.com/pipewrk/llm-core/compare/v1.5.0...v1.5.1) (2025-09-14)
+
+
+### Bug Fixes
+
+* **helpers:** prevent OOM by resuming correctly in pipelineToTransform ([69c5fc3](https://github.com/pipewrk/llm-core/commit/69c5fc349eaba01bc3ce704c48939358e479a6b8))
+
 ## [1.5.0](https://github.com/pipewrk/llm-core/compare/v1.4.0...v1.5.0) (2025-09-14)
 
 
