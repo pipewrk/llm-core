@@ -180,8 +180,8 @@ const ctx: Ctx = {
 };
 
 // 2) Define steps; each is (ctx) => (doc) => T | PipelineOutcome<T>
-const collectContentStep: PipelineStep<Ctx, QuestionDoc[]> = (ctx) => async (docs) => {
-  ctx.logger.info("Collecting content…");
+const collectContentStep: PipelineStep<QuestionDoc[], QuestionDoc[]> = (ctx) => async (docs) => {
+  (ctx as Ctx).logger.info("Collecting content…");
   return [
     ...docs,
     { source: "doc1.md", content: "Pipelines are great.", questions: [] },
@@ -189,8 +189,8 @@ const collectContentStep: PipelineStep<Ctx, QuestionDoc[]> = (ctx) => async (doc
   ];
 };
 
-const generateQuestionsStep: PipelineStep<Ctx, QuestionDoc[]> = (ctx) => async (docs) => {
-  ctx.logger.info("Generating questions…");
+const generateQuestionsStep: PipelineStep<QuestionDoc[], QuestionDoc[]> = (ctx) => async (docs) => {
+  (ctx as Ctx).logger.info("Generating questions…");
   return docs.map((doc) => ({
     ...doc,
     questions: [`What is the main point of ${doc.source}?`],
@@ -213,6 +213,13 @@ main();
 ```
 
 That's how simple and powerful the pipeline abstraction is, allowing you to compose steps and inject logging or other effects across the whole workflow. For detailed usage and advanced examples, see the **[Pipeline Module Developer Guide](./PIPELINE.md)**.
+
+TL;DR
+
+- Compose with `pipeline<Ctx, Initial>(ctx).addStep(...).addStep(...).addStep(...)`.
+- `run(initial)` returns the final output; if a step pauses, it resolves early with the last completed doc.
+- `stream(initial, [resume])` yields `{progress|pause|done}` and provides a resume token you can feed back to `stream`/`next`.
+- `next(initial, [resume])` advances one step at a time for UI/CLI drivers.
 
 ### `OllamaService` and `OpenAIService`
 

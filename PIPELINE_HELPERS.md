@@ -1,8 +1,11 @@
 ## Pipeline Helpers Reference
 
-The pipeline core is intentionally minimal: it orchestrates the flow of a document and its context through a series of steps. Cross‑cutting concerns (retries, timeouts, caching, logging, compositional strategies, event emission and stream integration) are implemented as **helpers**. This document summarises each helper exported from `src/core/helpers.ts` and demonstrates how to use them.
+The pipeline core is intentionally minimal: it orchestrates the flow of a document and its context through a series of steps. Cross‑cutting concerns (retries, timeouts, caching, logging, compositional strategies, event emission and stream integration) are implemented as **helpers**. This document summarises each helper exported from `src/core/helpers.ts` and how to use them.
 
-> All helpers operate on the same `(ctx, doc) → [ctx, doc]` shape. They return either the updated document or a pause outcome alongside the context, and may do so synchronously or asynchronously. This uniform signature makes them fully composable with one another.
+There are two helper categories:
+
+- Step wrappers: operate on `PipelineStep<T, T>` (e.g. `withRetry`, `withTimeout`, `withCache`, `withErrorHandling`, `tap`, `withMultiStrategy`). Use these directly inside `.addStep(...)`.
+- Transformer composition: `pipe` and `compose` operate on a separate `Transformer<C, T>` shape: `(ctx, doc) → [ctx, doc | PipelineOutcome<T>] | Promise<...>`. These are useful when composing outside a pipeline or stitching wrappers together.
 
 ## Table of contents
 
@@ -157,6 +160,8 @@ pipeline(ctx).addStep(multi);
 
 If none of the strategies pause and the stop condition never triggers, the result of the last strategy is returned.
 
+Note: The pipeline no longer exposes `addMultiStrategyStep`; prefer `withMultiStrategy([...])` inside `.addStep(...)` as shown above.
+
 ## eventsFromPipeline(p, initial)
 
 Wrap a pipeline so you can listen to progress and pause events. Returns an `EventEmitter` that emits strongly‑typed events:
@@ -199,4 +204,3 @@ createReadStream("in.ndjson", { encoding: "utf8", objectMode: true })
 ```
 
 If you don’t provide `onPause`, the transform still stops processing the current chunk on a pause; it’s up to the caller to decide when to resume or re‑enqueue.
-

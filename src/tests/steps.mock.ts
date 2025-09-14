@@ -7,9 +7,9 @@ import type { PipelineStep } from "../core/pipeline";
  */
 export const appendStep = (
   appendString: string,
-): PipelineStep<{ data: string }> => {
+): PipelineStep<{ data: string }, { data: string }> => {
   return (logger) => async (doc) => {
-    logger.info(`Appending "${appendString}" to data.`);
+    (logger as any).info(`Appending "${appendString}" to data.`);
     return { ...doc, data: doc.data + appendString };
   };
 };
@@ -17,8 +17,8 @@ export const appendStep = (
 /**
  * A sample PipelineStep that transforms data to uppercase.
  */
-export const uppercaseStep: PipelineStep<{ data: string }> =
+export const uppercaseStep: PipelineStep<{ data: string }, { data: string }> =
   (logger) => async (doc) => {
-    logger.info("Transforming data to uppercase.");
+    (logger as any).info("Transforming data to uppercase.");
     return { ...doc, data: doc.data.toUpperCase() };
   };

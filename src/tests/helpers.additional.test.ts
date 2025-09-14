@@ -17,7 +17,9 @@ describe("helpers additional coverage", () => {
     };
 
     delete ctx.pipeline.cache;
-    const p = pipeline(ctx).addStep(withCache(step, (d) => d.data));
+    const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(
+      withCache(step, (d) => d.data),
+    );
     const r1 = await p.run({ data: "A" });
     const r2 = await p.run({ data: "A" });
     expect(r1.data).toBe("A!");
@@ -31,7 +33,7 @@ describe("helpers additional coverage", () => {
     };
 
     ctx.pipeline.timeout = 50; // slower than the step
-    const p = pipeline(ctx).addStep(withTimeout(fast));
+    const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withTimeout(fast));
     const out = await p.run({ data: "X" });
     expect(out.data).toBe("Xfast");
   });
@@ -43,11 +45,12 @@ describe("helpers additional coverage", () => {
     };
 
     ctx.pipeline.retries = 5;
-    const p = pipeline(ctx).addStep(withRetry(pause));
+    const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withRetry(pause));
     let paused = false;
     for await (const evt of p.stream({ data: "Y" })) {
       if (evt.type === "pause") {
-        expect(evt.info.reason).toBe("wait");
+        const info = evt.info as Extract<PipelineOutcome<{ data: string }>, { done: false }>;
+        expect(info.reason).toBe("wait");
         paused = true;
         break;
       }
@@ -64,10 +67,9 @@ describe("helpers additional coverage", () => {
     };
 
     ctx.pipeline.retries = 3;
-    const p = pipeline(ctx).addStep(withRetry(doneStep));
+    const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withRetry(doneStep));
     const result = await p.run({ data: "Q" });
     expect(result.data).toBe("QD");
     expect(attempts).toBe(1);
   });
 });
-

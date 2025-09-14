@@ -263,50 +263,36 @@ export function withMultiStrategy<C extends { pipeline?: { stopCondition?: (doc:
 /**
  * Dispatcher interface: strongly typed `.on(...)`, `emit(...)` and returns `this`.
  */
-export interface PipelineEmitter<C, T> extends EventEmitter {
-  on(event: 'pause',    listener: (evt: Extract<StreamEvent<T>, { type: 'pause' }>)    => void): this;
-  on(event: 'progress', listener: (evt: Extract<StreamEvent<T>, { type: 'progress' }>) => void): this;
-  on(event: 'done',     listener: () => void): this;
-  on(event: 'error',    listener: (err: unknown) => void): this;
+export interface PipelineEmitter<C, O> extends EventEmitter {
+  on(event: 'pause', listener: (evt: Extract<StreamEvent<O>, { type: 'pause' }>) => void): this;
+  on(event: 'progress', listener: (evt: Extract<StreamEvent<O>, { type: 'progress' }>) => void): this;
+  on(event: 'done', listener: () => void): this;
+  on(event: 'error', listener: (err: unknown) => void): this;
 
-  emit(event: 'pause',    evt: Extract<StreamEvent<T>, { type: 'pause' }>): boolean;
-  emit(event: 'progress', evt: Extract<StreamEvent<T>, { type: 'progress' }>): boolean;
+  emit(event: 'pause', evt: Extract<StreamEvent<O>, { type: 'pause' }>): boolean;
+  emit(event: 'progress', evt: Extract<StreamEvent<O>, { type: 'progress' }>): boolean;
   emit(event: 'done'): boolean;
-  emit(event: 'error',    err: unknown): boolean;
+  emit(event: 'error', err: unknown): boolean;
 }
 
-/**
- * Convert a pipeline into an EventEmitter.  Emits `progress` when a step
- * completes normally, `pause` when a step returns a pause outcome, `done`
- * when the pipeline finishes, and `error` if an exception is thrown.
- */
-export function eventsFromPipeline<C, T>(
-  p: { stream(doc: T, resume?: any): AsyncGenerator<StreamEvent<T>, T, void> },
-  initial: T,
-): PipelineEmitter<C, T> {
-  const emitter = new EventEmitter() as PipelineEmitter<C, T>;
-
-  // Defer start so consumers can attach listeners before first emit.
+export function eventsFromPipeline<C, TInit, O>(
+  p: { stream(doc: TInit, resume?: any): AsyncGenerator<StreamEvent<O>, O, void> },
+  initial: TInit,
+): PipelineEmitter<C, O> {
+  const emitter = new EventEmitter() as PipelineEmitter<C, O>;
   queueMicrotask(async () => {
     try {
       for await (const evt of p.stream(initial)) {
         switch (evt.type) {
-          case 'pause':
-            emitter.emit('pause', evt);
-            break;
-          case 'progress':
-            emitter.emit('progress', evt);
-            break;
-          case 'done':
-            emitter.emit('done');
-            break;
+          case 'pause': emitter.emit('pause', evt); break;
+          case 'progress': emitter.emit('progress', evt); break;
+          case 'done': emitter.emit('done'); break;
         }
       }
     } catch (err) {
       emitter.emit('error', err);
     }
   });
-
   return emitter;
 }
 
@@ -316,58 +302,45 @@ export function eventsFromPipeline<C, T>(
 /**
  * Handler for “pause” events from the stream.
  */
-export type PauseEvent<C, T> = Extract<StreamEvent<T>, { type: 'pause' }>;
-export type PauseHandler<C, T> = (evt: PauseEvent<C, T>) => Promise<void>;
+export type PauseEvent<C, O> = Extract<StreamEvent<O>, { type: 'pause' }>;
+export type PauseHandler<C, O> = (evt: PauseEvent<C, O>) => Promise<void>;
 
-/**
- * Create a Transform stream from a pipeline.  Each chunk is processed
- * through the pipeline; pauses trigger the optional handler; normal results
- * are pushed downstream as JSON strings.  Context state is preserved
- * across chunks.
- */
-export function pipelineToTransform<C, T>(
-  p: {
-    next(doc: T, resume?: any): Promise<StreamEvent<T> | { done: true; value: T }>;
-  },
-  onPause?: PauseHandler<C, T>,
+export function pipelineToTransform<C, TInit, O>(
+  p: { next(doc: TInit, resume?: any): Promise<StreamEvent<O> | { done: true; value: O }> },
+  onPause?: PauseHandler<C, O>,
 ): Transform {
-  let current: T;
+  let current: O | TInit;
 
   return new Transform({
     objectMode: true,
 
-    async transform(chunk: T, _enc, callback) {
-      current = chunk;
+    async transform(chunk: TInit, _enc, callback) {
+      current = chunk;            // first iteration is the initial doc
       let resumeState: any | undefined;
+
       try {
         while (true) {
-          const res = await p.next(current, resumeState);
+          const res = await p.next(current as TInit, resumeState);
 
-          // **Pipeline-complete** case: raw {done,value}
           if ('done' in res) {
             this.push(JSON.stringify(res.value) + '\n');
             break;
           }
 
-          // **StreamEvent** case:
           switch (res.type) {
             case 'pause':
-              // res is guaranteed to be PauseEvent<C,T>
               if (onPause) await onPause(res);
-              // capture resume token to continue from the same point if caller rewrites
               resumeState = res.resume;
               return callback(); // stop processing this chunk on pause
 
             case 'progress':
-              current = res.doc;
+              current = res.doc; // now O (evolves each step)
               this.push(JSON.stringify(current) + '\n');
-              // advance using provided resume token so we don't restart at step 0
               resumeState = res.resume;
               break;
 
             case 'done':
-              // A StreamEvent 'done' signals end-of-stream
-              return callback(); // exit without error
+              return callback();
           }
         }
         callback();

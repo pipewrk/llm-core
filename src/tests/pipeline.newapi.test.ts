@@ -48,18 +48,20 @@ describe("pipeline (new API)", () => {
     }
   });
 
-  it("addMultiStrategyStep runs subs with stopCondition and propagates pause", async () => {
+  it("withMultiStrategy runs subs with stopCondition and propagates pause", async () => {
     const pause: PipelineStep<{ s: string }, { s: string }> = () => async () => ({
       done: false,
       reason: "wait",
       payload: {},
     });
+    // Use helpers.withMultiStrategy to compose sub-steps into a single step
+    const { withMultiStrategy } = await import("../core/helpers");
     const p = pipeline<typeof ctx, { s: string }>(ctx)
-      .addMultiStrategyStep([
+      .addStep(withMultiStrategy([
         (_c) => (d) => ({ s: d.s + "1" }),
         pause,
         (_c) => (d) => ({ s: d.s + "2" }),
-      ]);
+      ]));
 
     const it = p.stream({ s: "a" });
     const first = await it.next();

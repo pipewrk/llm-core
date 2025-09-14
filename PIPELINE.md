@@ -26,12 +26,12 @@ Each dashed arrow represents a `PipelineOutcome<T>` returned by a step with `don
 
 ## Defining Steps
 
-A step is a curried function taking your context `C` and returning a transformation function on the document type `T`:
+A step is a curried function taking your context and returning a transformation function on the document:
 
 ```ts
-type PipelineStep<C, T> = (
-  ctx: C
-) => (doc: T) => T | PipelineOutcome<T> | Promise<T | PipelineOutcome<T>>;
+type PipelineStep<I, O> = (
+  ctx: unknown
+) => (doc: I) => O | PipelineOutcome<O> | Promise<O | PipelineOutcome<O>>;
 ```
 
 Steps may synchronously or asynchronously transform the document. To pause execution, return `{ done: false, reason: string, payload: any }`. When the pipeline encounters such a result it yields control to the caller.
@@ -48,13 +48,13 @@ interface Message {
 }
 
 // Trim whitespace
-const trim: PipelineStep<MsgCtx, Message> = (ctx) => (doc) => {
-  ctx.logger.info("Trimming text...");
+const trim: PipelineStep<Message, Message> = (ctx) => (doc) => {
+  (ctx as MsgCtx).logger.info("Trimming text...");
   return { ...doc, text: doc.text.trim() };
 };
 
 // Require approval
-const requireApproval: PipelineStep<MsgCtx, Message> = () => (doc) => {
+const requireApproval: PipelineStep<Message, Message> = () => (doc) => {
   if (!doc.approved) {
     return {
       done: false,
@@ -68,7 +68,7 @@ const requireApproval: PipelineStep<MsgCtx, Message> = () => (doc) => {
 
 ## Creating Pipelines
 
-Use `pipeline<C, T>(context)` to create a new pipeline. Chain `.addStep()` to add steps. Then either `.run(doc)` to process the entire pipeline, `.stream(doc)` to iterate through each yield, or `.next(doc, state)` for fine‑grained control.
+Use `pipeline<C, T>(context)` to create a new pipeline. Chain `.addStep()` to add steps. Then either `.run(doc)` to process the entire pipeline, `.stream(doc)` to iterate through each yield, or `.next(doc, resume)` for fine‑grained control.
 
 ```ts
 const ctx: MsgCtx = { logger: console };
@@ -77,15 +77,15 @@ const p = pipeline<MsgCtx, Message>(ctx).addStep(trim).addStep(requireApproval);
 // Run end‑to‑end
 p.run({ text: " hello " }).then((final) => console.log(final));
 
-// Stream and handle pauses
-for await (const { value, stepIndex, state } of p.stream({ text: " hello " })) {
-  if (isPipelineOutcome<Message>(value) && !value.done) {
-    // handle pause (e.g. ask user), then resume via p.next()
-    value.payload.approved = true;
-    const resumed = await p.next(value.payload, state);
-    // ... handle resumed
-  } else {
-    // normal progress
+// Stream and handle pauses (event-based)
+for await (const evt of p.stream({ text: " hello " })) {
+  if (evt.type === "progress") {
+    ctx.logger.info(`progress at step #${evt.step + 1}`);
+  }
+  if (evt.type === "pause") {
+    ctx.logger.warn(`paused at step #${evt.step + 1}: ${evt.info.reason}`);
+    // Optionally resume immediately
+    await p.next(evt.resume.doc, evt.resume);
   }
 }
 ```
@@ -94,26 +94,9 @@ for await (const { value, stepIndex, state } of p.stream({ text: " hello " })) {
 
 ### Core Types
 
-#### `PipelineContext<U = {}, T = any>`
+#### Context
 
-Suggested type alias (not exported) for the single context object that carries both your own fields **and** the pipeline’s built‑in controls and state:
-
-```ts
-export type PipelineContext<U = {}, T = any> = U & {
-  /** Pipeline helpers’ options */
-  pipeline: {
-    retries?: number;                        // ⏲ number of retry attempts
-    timeout?: number;                        // ⏲ race step vs timer
-    cache?: Map<any, unknown>;               // ⚡ memoisation store
-    stopCondition?: (doc: T) => boolean;     // 🛑 short‑circuit multi‑strategy
-  };
-  /** Internal state for streaming & resume */
-  state: {
-    history: Array<{ step: number; doc: T }>;
-    resume?: StreamState<T>;
-  };
-};
-```
+You can pass any context object to `pipeline(ctx)`. Steps receive it as `unknown`; cast to your app shape as needed. Helpers read optional fields under `ctx.pipeline` (e.g. `retries`, `timeout`, `cache`, `stopCondition`).
 
 #### `PipelineOutcome<T>`
 
@@ -125,29 +108,29 @@ export type PipelineOutcome<T> =
   | { done: true;  value: T };                  // an early “done” that still produces a new doc
 ```
 
-#### `PipelineStep<C, T>`
+#### `PipelineStep<I, O>`
 
-A curried function that, given your context type `C`, returns a transformer over `T`.  A step may return the new `T` (sync or async) or a `PipelineOutcome<T>` to pause or complete early.
+Curried transformer over documents: given a context, returns a function that transforms `I` into `O`, or yields a `PipelineOutcome<O>`.
 
 ```ts
-export type PipelineStep<C, T> =
-  (ctx: C) =>
-    (doc: T) =>
-      T
-      | PipelineOutcome<T>
-      | Promise<T | PipelineOutcome<T>>;
+export type PipelineStep<I, O> =
+  (ctx: unknown) =>
+    (doc: I) =>
+      O
+      | PipelineOutcome<O>
+      | Promise<O | PipelineOutcome<O>>;
 ```
 
 ---
 
 ### Pipeline Factory
 
-#### `pipeline<C, T>(ctx: PipelineContext<C, T>): Pipeline<C, T>`
+#### `pipeline<C, T>(ctx: C): Pipeline<C, T>`
 
 Create a new pipeline bound to your context:
 
 ```ts
-const myCtx: PipelineContext<{ logger: Console }, Doc> = {
+const myCtx = {
   logger: console,
   pipeline: {},
   state: { history: [] },
@@ -156,7 +139,7 @@ const myCtx: PipelineContext<{ logger: Console }, Doc> = {
 const p = pipeline(myCtx);
 ```
 
-#### `addStep(step: PipelineStep<C, T>) → this`
+#### `addStep(step: PipelineStep<T, N>) → Pipeline<C, T, N>`
 
 Append a single step to the pipeline’s sequence:
 
@@ -166,7 +149,7 @@ p.addStep(trimStep)
  .addStep(transformStep);
 ```
 
-#### `run(doc: T) → Promise<T>`
+#### `run(doc: T) → Promise<O>`
 
 Execute every step in order and resolve with the final document.
 If any step returns a **pause** outcome (`done: false`), `run()` resolves immediately with the last document state.
@@ -175,7 +158,7 @@ If any step returns a **pause** outcome (`done: false`), `run()` resolves immedi
 const finalDoc = await p.run(initialDoc);
 ```
 
-#### `stream(doc: T, start?: StreamState<T>) → AsyncGenerator<StreamEvent<C,T>, T, void>`
+#### `stream(doc: T, resume?: ResumeState<T>) → AsyncGenerator<StreamEvent<O>, O, void>`
 
 Iterate step‑by‑step, yielding after **every** step:
 
@@ -195,7 +178,7 @@ for await (const evt of p.stream(initialDoc)) {
 }
 ```
 
-#### `next(doc: T, state?: StreamState<T>) → Promise<StreamYield<T> | {done:true;value:T}>`
+#### `next(doc: T, resume?: ResumeState<T>) → Promise<StreamEvent<O> | {done:true;value:O}>`
 
 Advance the pipeline exactly one step (or resume from a pause) without managing the generator yourself.
 
@@ -216,13 +199,9 @@ export type StreamEvent<T> =
 
 A suite of ready‑made wrappers lives in **`src/core/helpers.ts`** (see `PIPELINE_HELPERS.md`):
 
-* **Error handling**: `withErrorHandling(step)`
-* **Retries**:        `withRetry(step)`
-* **Timeouts**:       `withTimeout(step)`
-* **Caching**:        `withCache(step, keyFn)`
-* **Tap**:            `tap(sideEffect)`
-* **Multi‑strategy**: `withMultiStrategy([stepA, stepB, …])`
-* **Composable**:     `compose(t1, t2, …)`
+- Step wrappers: `withErrorHandling`, `withRetry`, `withTimeout`, `withCache`, `tap`, `withMultiStrategy`
+- Transformer composition: `pipe`, `compose` (work on `(ctx, doc) -> [ctx, doc | PipelineOutcome]`)
+- Integrations: `eventsFromPipeline`, `pipelineToTransform`
 
 ---
 
@@ -232,3 +211,28 @@ A suite of ready‑made wrappers lives in **`src/core/helpers.ts`** (see `PIPELI
 * **Node Streams**:  `pipelineToTransform(pipeline, onPause?)` → processes objects, pushes NDJSON; on pause calls handler and stops current chunk
 
 For detailed examples of rate‑limiting, human‑in‑the‑loop, backpressure, progress reporting, and more, see the companion [`PIPELINE_HELPERS.md`](./PIPELINE_HELPERS.md) and the `examples/` directory.
+
+---
+
+### TL;DR
+
+- Compose with `pipeline<Ctx, Initial>(ctx).addStep(...).addStep(...).addStep(...)`.
+- `run(initial)` returns final output; if a step pauses, it resolves early with the last completed doc.
+- `stream(initial, [resume])` yields `{progress|pause|done}` and provides a resume token.
+- `next(initial, [resume])` advances one step at a time (good for UI/CLIs).
+
+#### Multi‑strategy
+
+To try multiple sub‑strategies in order with optional early stop, use the helper:
+
+```ts
+import { withMultiStrategy } from "@jasonnathan/llm-core";
+
+const multi = withMultiStrategy([
+  stepA,
+  stepB,
+  stepC,
+]);
+
+const p = pipeline(ctx).addStep(multi);
+```

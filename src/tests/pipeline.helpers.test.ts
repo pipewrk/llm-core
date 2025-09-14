@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { ILogger } from "../types/dataset";
-import type {
-  PipelineContext,
-  PipelineOutcome,
-  PipelineStep,
-  StreamEvent,
-} from "../core/pipeline";
+import type { PipelineOutcome, PipelineStep, StreamEvent } from "../core/pipeline";
 import { pipeline, isPipelineOutcome } from "../core/pipeline";
 import { MockLogger } from "./logger.mock";
 import { appendStep, uppercaseStep } from "./steps.mock";
@@ -23,7 +18,7 @@ import {
 
 describe("Helper Function Tests", () => {
   let logger: MockLogger;
-  let ctx: PipelineContext<{ logger: ILogger }, { data: string }>;
+  let ctx: { logger: ILogger; pipeline: any; state: any };
 
   beforeEach(() => {
     logger = new MockLogger();
@@ -138,23 +133,23 @@ describe("Helper Function Tests", () => {
 
   describe("withErrorHandling", () => {
     it("run returns original document on error", async () => {
-      const errorStep: PipelineStep<typeof ctx, { data: string }> =
+      const errorStep: PipelineStep<{ data: string }, { data: string }> =
         () => async (doc) => {
           throw new Error("fail");
         };
 
-      const p = pipeline(ctx).addStep(withErrorHandling(errorStep));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withErrorHandling(errorStep));
       const result = await p.run({ data: "orig" });
       expect(result.data).toBe("orig");
     });
 
     it("stream yields a pause event on error", async () => {
-      const errorStep: PipelineStep<typeof ctx, { data: string }> =
+      const errorStep: PipelineStep<{ data: string }, { data: string }> =
         () => async () => {
           throw new Error("fail");
         };
 
-      const p = pipeline(ctx).addStep(withErrorHandling(errorStep));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withErrorHandling(errorStep));
       for await (const evt of p.stream({ data: "x" })) {
         if (evt.type === "pause") {
           const outcome = evt.info as Extract<
@@ -171,27 +166,27 @@ describe("Helper Function Tests", () => {
   describe("withRetry", () => {
     it("retries on error then succeeds (run)", async () => {
       let calls = 0;
-      const flaky: PipelineStep<typeof ctx, { data: string }> =
+      const flaky: PipelineStep<{ data: string }, { data: string }> =
         () => async (doc) => {
           if (calls++ < 1) throw new Error("err");
           return { data: doc.data + "|ok" };
         };
 
       ctx.pipeline.retries = 1;
-      const p = pipeline(ctx).addStep(withRetry(flaky));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withRetry(flaky));
       const result = await p.run({ data: "start" });
       expect(result.data).toBe("start|ok");
       expect(calls).toBe(2);
     });
 
     it("stream yields only the final retryExceeded pause", async () => {
-      const alwaysFail: PipelineStep<typeof ctx, { data: string }> =
+      const alwaysFail: PipelineStep<{ data: string }, { data: string }> =
         () => async () => {
           throw new Error("fail");
         };
 
       ctx.pipeline.retries = 2;
-      const p = pipeline(ctx).addStep(withRetry(alwaysFail));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withRetry(alwaysFail));
 
       for await (const evt of p.stream({ data: "Y" })) {
         if (evt.type === "pause") {
@@ -210,21 +205,21 @@ describe("Helper Function Tests", () => {
 
   describe("withTimeout", () => {
     it("run pauses immediately when timeout=0", async () => {
-      const slow: PipelineStep<typeof ctx, { data: string }> = () => () =>
+      const slow: PipelineStep<{ data: string }, { data: string }> = () => () =>
         new Promise((res) => setTimeout(() => res({ data: "late" }), 10));
 
       ctx.pipeline.timeout = 0;
-      const p = pipeline(ctx).addStep(withTimeout(slow));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withTimeout(slow));
       const result = await p.run({ data: "init" });
       expect(result.data).toBe("init");
     });
 
     it("stream yields timeout pause", async () => {
-      const slow: PipelineStep<typeof ctx, { data: string }> = () => () =>
+      const slow: PipelineStep<{ data: string }, { data: string }> = () => () =>
         new Promise((res) => setTimeout(() => res({ data: "late" }), 10));
 
       ctx.pipeline.timeout = 0;
-      const p = pipeline(ctx).addStep(withTimeout(slow));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withTimeout(slow));
       for await (const evt of p.stream({ data: "in" })) {
         if (evt.type === "pause") {
           const outcome = evt.info as Extract<
@@ -241,14 +236,14 @@ describe("Helper Function Tests", () => {
   describe("withCache", () => {
     it("run caches successful results", async () => {
       let hits = 0;
-      const step: PipelineStep<typeof ctx, { data: string }> =
+      const step: PipelineStep<{ data: string }, { data: string }> =
         () => async (doc) => {
           hits++;
           return { data: doc.data + "|c" };
         };
 
       ctx.pipeline.cache = new Map();
-      const p = pipeline(ctx).addStep(withCache(step, (d) => d.data));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withCache(step, (d) => d.data));
 
       const r1 = await p.run({ data: "A" });
       const r2 = await p.run({ data: "A" });
@@ -259,14 +254,14 @@ describe("Helper Function Tests", () => {
 
     it("stream reuses cache for same key", async () => {
       let hits = 0;
-      const step: PipelineStep<typeof ctx, { data: string }> =
+      const step: PipelineStep<{ data: string }, { data: string }> =
         () => async (doc) => {
           hits++;
           return { data: doc.data + "|c" };
         };
 
       ctx.pipeline.cache = new Map();
-      const p = pipeline(ctx).addStep(withCache(step, (d) => d.data));
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withCache(step, (d) => d.data));
 
       // first pass
       for await (const _ of p.stream({ data: "B" })) {
@@ -286,7 +281,7 @@ describe("Helper Function Tests", () => {
         c.logger.info("tapped");
       });
 
-      const p = pipeline(ctx).addStep(t);
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(t);
       const result = await p.run({ data: "unchanged" });
       expect(called).toBe(1);
       expect(result.data).toBe("unchanged");
@@ -299,7 +294,7 @@ describe("Helper Function Tests", () => {
         called++;
       });
 
-      const p = pipeline(ctx).addStep(t);
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(t);
       for await (const evt of p.stream({ data: "X" })) {
         if (evt.type === "progress") {
           expect(evt.doc.data).toBe("X");
@@ -311,30 +306,30 @@ describe("Helper Function Tests", () => {
 
   describe("withMultiStrategy", () => {
     it("run stops when stopCondition is met", async () => {
-      const sub1: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+      const sub1: PipelineStep<{ data: string }, { data: string }> = () => (doc: { data: string }) => ({
         data: doc.data + "1",
       });
-      const sub2: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+      const sub2: PipelineStep<{ data: string }, { data: string }> = () => (doc: { data: string }) => ({
         data: doc.data + "2",
       });
 
-      ctx.pipeline.stopCondition = (doc) => doc.data.endsWith("1");
-      const p = pipeline(ctx).addStep(withMultiStrategy([sub1, sub2]));
+      ctx.pipeline.stopCondition = (doc: { data: string }) => doc.data.endsWith("1");
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withMultiStrategy([sub1, sub2]));
 
       const result = await p.run({ data: "X" });
       expect(result.data).toBe("X1");
     });
 
     it("stream yields progress events until stopCondition", async () => {
-      const sub1: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+      const sub1: PipelineStep<{ data: string }, { data: string }> = () => (doc: { data: string }) => ({
         data: doc.data + "A",
       });
-      const sub2: PipelineStep<typeof ctx, { data: string }> = () => (doc) => ({
+      const sub2: PipelineStep<{ data: string }, { data: string }> = () => (doc: { data: string }) => ({
         data: doc.data + "B",
       });
 
-      ctx.pipeline.stopCondition = (doc) => doc.data.includes("AB");
-      const p = pipeline(ctx).addStep(withMultiStrategy([sub1, sub2]));
+      ctx.pipeline.stopCondition = (doc: { data: string }) => doc.data.includes("AB");
+      const p = pipeline<typeof ctx, { data: string }>(ctx).addStep(withMultiStrategy([sub1, sub2]));
 
       const seen: string[] = [];
       for await (const evt of p.stream({ data: "Z" })) {
