@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://github.com/pipewrk/llm-core/compare/v1.3.8...v1.4.0) (2025-09-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** Public types and signatures changed
+- PipelineContext removed; PipelineStep is now (ctx) => (doc) with inferred ctx
+- StreamEvent now carries a resume token; stream/next accept optional resume state
+- Downstream helpers and tests must be updated to the new API
+
+* **core:** rework pipeline to context-owned steps and resumable streaming ([c151a20](https://github.com/pipewrk/llm-core/commit/c151a201bbedb9e1dd5c0925a15ba65ee1513116))
+
 ### [1.3.8](https://github.com/pipewrk/llm-core/compare/v1.3.7...v1.3.8) (2025-08-24)
 
 
