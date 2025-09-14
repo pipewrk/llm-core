@@ -10,12 +10,7 @@
 import { Transform } from "node:stream";
 import { EventEmitter } from "node:events";
 import { isPipelineOutcome } from "./pipeline";
-import type {
-  PipelineContext,
-  PipelineOutcome,
-  PipelineStep,
-  StreamEvent,
-} from "./pipeline";
+import type { PipelineOutcome, PipelineStep, StreamEvent } from "./pipeline";
 
 /* --------------------------------------------------------------------------
  *  Type aliases for composed transformers
@@ -81,9 +76,9 @@ export function compose<C, T>(...fns: Transformer<C, T>[]): Transformer<C, T> {
  * into a pause outcome with reason `'error'`.  Does *not* mutate arbitrary
  * fields on the context, just returns the pause so the caller can react.
  */
-export function withErrorHandling<U, T>(
-  step: PipelineStep<PipelineContext<U, T>, T>
-): PipelineStep<PipelineContext<U, T>, T> {
+export function withErrorHandling<C, T>(
+  step: PipelineStep<T, T>
+): PipelineStep<T, T> {
   return (ctx) => async (doc) => {
     try {
       return await step(ctx)(doc);
@@ -105,16 +100,17 @@ export function withErrorHandling<U, T>(
  * - Other pauses are propagated immediately.
  * - Once retries are exhausted, returns a pause with `reason: 'retryExceeded'`.
  */
-export function withRetry<U, T>(
-  step: PipelineStep<PipelineContext<U, T>, T>
-): PipelineStep<PipelineContext<U, T>, T> {
+export function withRetry<C extends { pipeline?: { retries?: number } }, T>(
+  step: PipelineStep<T, T>
+): PipelineStep<T, T> {
   return (ctx) => async (doc) => {
+    const c = ctx as unknown as C;
     let attempt = 0;
-    const maxRetries = ctx.pipeline.retries ?? 0;
+    const maxRetries = c.pipeline?.retries ?? 0;
 
     while (attempt <= maxRetries) {
       // wrap step so throws become error‑pauses
-      const result = await withErrorHandling(step)(ctx)(doc);
+      const result = await withErrorHandling<C, T>(step)(ctx)(doc);
 
       if (isPipelineOutcome(result)) {
         if (result.done) {
@@ -150,11 +146,12 @@ export function withRetry<U, T>(
  *   `{ done: false, reason: 'timeout', payload: doc }`.
  * - Does *not* cancel the underlying step.
  */
-export function withTimeout<U, T>(
-  step: PipelineStep<PipelineContext<U, T>, T>
-): PipelineStep<PipelineContext<U, T>, T> {
+export function withTimeout<C extends { pipeline?: { timeout?: number } }, T>(
+  step: PipelineStep<T, T>
+): PipelineStep<T, T> {
   return (ctx) => async (doc) => {
-    const ms = ctx.pipeline.timeout ?? 0;
+    const c = ctx as unknown as C;
+    const ms = c.pipeline?.timeout ?? 0;
     return Promise.race<T | PipelineOutcome<T>>([
       step(ctx)(doc),
       new Promise<PipelineOutcome<T>>((resolve) =>
@@ -173,12 +170,13 @@ export function withTimeout<U, T>(
  *   the step just runs unmemoised.
  * - Only caches successful results (i.e. non‑pause outcomes).
  */
-export function withCache<U, T>(
-  step: PipelineStep<PipelineContext<U, T>, T>,
+export function withCache<C extends { pipeline?: { cache?: Map<any, unknown> } }, T>(
+  step: PipelineStep<T, T>,
   keyFn: (doc: T) => unknown
-): PipelineStep<PipelineContext<U, T>, T> {
+): PipelineStep<T, T> {
   return (ctx) => async (doc) => {
-    const cache = ctx.pipeline.cache;
+    const c = ctx as unknown as C;
+    const cache = c.pipeline?.cache;
     if (!cache) {
       // no cache configured → just delegate
       return step(ctx)(doc);
@@ -203,9 +201,9 @@ export function withCache<U, T>(
  */
 export function tap<C, T>(
   sideEffect: (ctx: C, doc: T) => void
-): PipelineStep<C, T> {
+): PipelineStep<T, T> {
   return (ctx) => (doc) => {
-    sideEffect(ctx, doc);
+    sideEffect(ctx as unknown as C, doc);
     return doc;
   };
 }
@@ -225,9 +223,9 @@ export function tap<C, T>(
  * - After any normal result, if `ctx.pipeline.stopCondition(doc)` returns
  *   `true`, we break early.
  */
-export function withMultiStrategy<U, T>(
-  subs: PipelineStep<PipelineContext<U, T>, T>[]
-): PipelineStep<PipelineContext<U, T>, T> {
+export function withMultiStrategy<C extends { pipeline?: { stopCondition?: (doc: T) => boolean } }, T>(
+  subs: PipelineStep<T, T>[]
+): PipelineStep<T, T> {
   return (ctx) => async (doc) => {
     let current = doc;
 
@@ -246,8 +244,9 @@ export function withMultiStrategy<U, T>(
         current = result;
       }
 
-      const stop = ctx.pipeline.stopCondition;
-      if (stop && stop(current)) {
+      const c = ctx as unknown as C;
+      const stop = c.pipeline?.stopCondition;
+      if (stop?.(current)) {
         break;
       }
     }
@@ -265,13 +264,13 @@ export function withMultiStrategy<U, T>(
  * Dispatcher interface: strongly typed `.on(...)`, `emit(...)` and returns `this`.
  */
 export interface PipelineEmitter<C, T> extends EventEmitter {
-  on(event: 'pause',    listener: (evt: Extract<StreamEvent<C, T>, { type: 'pause' }>)    => void): this;
-  on(event: 'progress', listener: (evt: Extract<StreamEvent<C, T>, { type: 'progress' }>) => void): this;
+  on(event: 'pause',    listener: (evt: Extract<StreamEvent<T>, { type: 'pause' }>)    => void): this;
+  on(event: 'progress', listener: (evt: Extract<StreamEvent<T>, { type: 'progress' }>) => void): this;
   on(event: 'done',     listener: () => void): this;
   on(event: 'error',    listener: (err: unknown) => void): this;
 
-  emit(event: 'pause',    evt: Extract<StreamEvent<C, T>, { type: 'pause' }>): boolean;
-  emit(event: 'progress', evt: Extract<StreamEvent<C, T>, { type: 'progress' }>): boolean;
+  emit(event: 'pause',    evt: Extract<StreamEvent<T>, { type: 'pause' }>): boolean;
+  emit(event: 'progress', evt: Extract<StreamEvent<T>, { type: 'progress' }>): boolean;
   emit(event: 'done'): boolean;
   emit(event: 'error',    err: unknown): boolean;
 }
@@ -282,7 +281,7 @@ export interface PipelineEmitter<C, T> extends EventEmitter {
  * when the pipeline finishes, and `error` if an exception is thrown.
  */
 export function eventsFromPipeline<C, T>(
-  p: { stream(doc: T): AsyncGenerator<StreamEvent<C, T>, T, void> },
+  p: { stream(doc: T, resume?: any): AsyncGenerator<StreamEvent<T>, T, void> },
   initial: T,
 ): PipelineEmitter<C, T> {
   const emitter = new EventEmitter() as PipelineEmitter<C, T>;
@@ -316,7 +315,7 @@ export function eventsFromPipeline<C, T>(
 /**
  * Handler for “pause” events from the stream.
  */
-export type PauseEvent<C, T> = Extract<StreamEvent<C, T>, { type: 'pause' }>;
+export type PauseEvent<C, T> = Extract<StreamEvent<T>, { type: 'pause' }>;
 export type PauseHandler<C, T> = (evt: PauseEvent<C, T>) => Promise<void>;
 
 /**
@@ -327,7 +326,7 @@ export type PauseHandler<C, T> = (evt: PauseEvent<C, T>) => Promise<void>;
  */
 export function pipelineToTransform<C, T>(
   p: {
-    next(doc: T): Promise<StreamEvent<C, T> | { done: true; value: T }>;
+    next(doc: T): Promise<StreamEvent<T> | { done: true; value: T }>;
   },
   onPause?: PauseHandler<C, T>,
 ): Transform {

@@ -1,5 +1,5 @@
 import { pipeline } from "@huggingface/transformers";
-import type { ILogger } from "../types/dataset.ts";
+import type { ILogger } from "src/types/dataset.ts";
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 
 export class SimilarityService<T> {
@@ -20,15 +20,25 @@ export class SimilarityService<T> {
    * @param toStringFn - A transformation function to map `T` into strings for similarity analysis.
    */
   private constructor(
-    logger: ILogger,
+    logger: ILogger | undefined,
     extractor: FeatureExtractionPipeline,
     similarityThreshold: number,
     toStringFn: (item: T) => string,
   ) {
-    this.logger = logger;
+    this.logger = logger ?? SimilarityService.noopLogger();
     this.extractor = extractor;
     this.similarityThreshold = similarityThreshold;
     this.toStringFn = toStringFn;
+  }
+
+  private static noopLogger(): ILogger {
+    return {
+      attn: () => {},
+      impt: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    };
   }
 
   /**
@@ -43,7 +53,7 @@ export class SimilarityService<T> {
    */
   public static async instance<T>(
     modelName: string,
-    logger: ILogger,
+    logger: ILogger | undefined,
     similarityThreshold: number = 0.7,
     toStringFn: (item: T) => string,
   ): Promise<SimilarityService<T>> {

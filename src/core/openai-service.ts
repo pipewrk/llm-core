@@ -1,8 +1,7 @@
 import { LLMService } from "./llm-service.ts";
-import { withLogger } from "./decorators.ts";
 import { getEnv } from "./env.ts";
+import type { ILogger } from "src/types/dataset.ts";
 
-@withLogger
 export class OpenAIService extends LLMService {
   private endpoint: string;
   private model: string;
@@ -20,8 +19,9 @@ export class OpenAIService extends LLMService {
     model: string,
     endpoint = getEnv("OPENAI_ENDPOINT"),
     apiKey = getEnv("OPENAI_API_KEY"),
+    ctx?: { logger?: ILogger } | ILogger,
   ) {
-    super();
+    super(ctx);
     this.endpoint = endpoint;
     this.model = model;
     this.apiKey = apiKey;

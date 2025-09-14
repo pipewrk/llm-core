@@ -1,5 +1,6 @@
 import { LLMService } from "./llm-service.ts";
 import { getEnv } from "./env.ts";
+import type { ILogger } from "src/types/dataset.ts";
 
 export class OllamaService extends LLMService {
   private endpoint: string;
@@ -16,9 +17,10 @@ export class OllamaService extends LLMService {
   constructor(
     model: string,
     endpoint = getEnv("OLLAMA_ENDPOINT"),
-    apiKey = getEnv("OLLAMA_API_KEY")
+    apiKey = getEnv("OLLAMA_API_KEY"),
+    ctx?: { logger?: ILogger } | ILogger,
   ) {
-    super();
+    super(ctx);
     this.endpoint = endpoint;
     this.model = model;
     this.apiKey = apiKey;

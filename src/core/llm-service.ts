@@ -1,13 +1,32 @@
-import { withLogger } from "./decorators.ts";
-import type { ILogger } from "../types/dataset.ts";
+import type { ILogger } from "src/types/dataset.ts";
 
 /**
  * LLMService is a common interface for language model services.
  */
 
-@withLogger
 export abstract class LLMService {
-  protected readonly logger!: ILogger;
+  protected readonly logger: ILogger;
+
+  constructor(ctx?: { logger?: ILogger } | ILogger) {
+    this.logger = LLMService.resolveLogger(ctx);
+  }
+
+  private static resolveLogger(ctx?: { logger?: ILogger } | ILogger): ILogger {
+    const noop: ILogger = {
+      attn: () => {},
+      impt: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    };
+
+    if (!ctx) return noop;
+    const maybe = (ctx as any).logger ? (ctx as any).logger : ctx;
+    const has = (k: keyof ILogger) => typeof (maybe as any)?.[k] === "function";
+    return has("info") && has("warn") && has("error") && has("attn") && has("impt")
+      ? (maybe as ILogger)
+      : noop;
+  }
   /**
    * Generates a prompt by combining a system prompt and a user prompt,
    * sends the request to the underlying API, and returns the parsed JSON response.

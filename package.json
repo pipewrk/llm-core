@@ -38,6 +38,67 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json",
+    "./pipeline": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/pipeline.d.ts"
+    },
+    "./ollama-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/ollama-service.d.ts"
+    },
+    "./openai-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/openai-service.d.ts"
+    },
+    "./chunker": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/chunker.d.ts"
+    },
+    "./similarity-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/similarity-service.d.ts"
+    },
+    "./file-utils": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/file-utils.d.ts"
+    },
+    "./env": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/env.d.ts"
+    },
+    "./logger": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/logger.d.ts"
+    },
+    "./llm-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/llm-service.d.ts"
+    },
+    "./markdown-splitter": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/markdown-splitter.d.ts"
+    },
+    "./cosine-similarity": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/cosine-similarity.d.ts"
+    },
+    "./ufetch": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/ufetch.d.ts"
+    },
+    "./runtime": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/runtime.d.ts"
+    },
+    "./batch-openai-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/batch-openai-service.d.ts"
+    },
+    "./decorators": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/decorators.d.ts"
     }
   },
   "files": [
@@ -47,6 +108,7 @@
   "scripts": {
     "exp": "ts-node ./src/test.ts ",
     "build": "tsup && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "release": "standard-version",
     "release:patch": "standard-version --release-as patch",
     "release:minor": "standard-version --release-as minor",
