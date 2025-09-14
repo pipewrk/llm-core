@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/pipewrk/llm-core/compare/v1.4.0...v1.5.0) (2025-09-14)
+
+
+### Features
+
+* **core:** optional context logger for LLM services; align helpers to new pipeline types ([8beac58](https://github.com/pipewrk/llm-core/commit/8beac588cb5df8f0209ce81937c747829f8e2251))
+
 ## [1.4.0](https://github.com/pipewrk/llm-core/compare/v1.3.8...v1.4.0) (2025-09-14)
 
 
