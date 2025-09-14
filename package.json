@@ -2,7 +2,7 @@
   "name": "@jasonnathan/llm-core",
   "description": "Composable TypeScript toolkit for LLM pipelines, semantic chunking, and AI workflow orchestration.",
   "author": "Jason Nathan <jjnathanjr@pm.me> (https://github.com/pipewrk)",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "homepage": "https://github.com/pipewrk/llm-core",
   "bugs": {
     "url": "https://github.com/pipewrk/llm-core/issues"
