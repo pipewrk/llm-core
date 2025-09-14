@@ -1,44 +1,42 @@
-# OllamaService Developer Guide
+# Ollama Service (pipeline-based)
 
-The `OllamaService` is a robust client for interacting with the [Ollama](https://ollama.com/) API. It provides a high-level interface for generating text, enforcing structured JSON output, and creating text embeddings, with built-in retry logic and error handling.
-
-It is designed to be used with models that support JSON output and instruction following.
+Functional, pipeline-driven helpers for interacting with the [Ollama](https://ollama.com/) API. They provide high-level primitives for generating typed JSON and creating text embeddings, with built-in retry/timeout policies and error logging, and use your app context directly.
 
 ## Typed JSON Responses via LLM Visual Flow
 
 ```mermaid
 sequenceDiagram
     participant Client
-    participant OllamaService
+    participant Service
     participant OllamaAPI
 
-    Client->>OllamaService: generatePromptAndSend(prompt, schema)
-    OllamaService->>OllamaAPI: POST /api/chat (format: 'json')
-    OllamaAPI-->>OllamaService: Raw JSON Response
-    OllamaService->>OllamaService: Sanitize & Parse JSON
+    Client->>Service: generatePromptAndSend(ctx, prompt, schema)
+    Service->>OllamaAPI: POST /api/chat (format: 'json')
+    OllamaAPI-->>Service: Raw JSON Response
+    Service->>Service: Sanitize & Parse JSON
 
     alt Validation Passes
-        OllamaService-->>Client: Typed <T> Response
+        Service-->>Client: Typed <T> Response
     else Validation Fails
-        OllamaService->>OllamaAPI: Retry Request (up to 3x)
-        OllamaAPI-->>OllamaService: New Response
-        OllamaService->>OllamaService: Re-Validate
-        OllamaService-->>Client: Final Response or Error
+        Service->>OllamaAPI: Retry Request (up to ctx.pipeline.retries)
+        OllamaAPI-->>Service: New Response
+        Service->>Service: Re-Validate
+        Service-->>Client: Final Response or Pause
     end
 
 ```
 
 ## Core Concepts
 
-- **Service Client**: A class-based client that manages the connection and authentication with the Ollama API.
-- **Structured Prompts**: A key feature is the ability to request structured JSON output from the LLM by providing a JSON schema in the prompt options. The service handles the sanitization and parsing of the response to ensure it conforms to the requested type.
-- **Embeddings**: The service can also be used to generate vector embeddings for text, which is essential for tasks like semantic search and clustering.
+- **Context-first**: You pass a context with `logger`, optional `pipeline` policy slots, and model settings. The helpers use this context directly.
+- **Structured Prompts**: Provide a JSON schema via `options.schema` to request structured JSON. The Service sanitizes and parses content robustly.
+- **Embeddings**: Create vector embeddings for text with the same context (observing retry/timeout policies).
 
 ---
 
 ## API Reference & Usage
 
-How to initialize the client, call high‑level methods, and handle structured results.
+Initialize a context, call high‑level helpers, and handle structured results.
 
 ### Initialization
 
@@ -49,13 +47,16 @@ OLLAMA_ENDPOINT="http://localhost:11434"
 # OLLAMA_API_KEY="your-api-key" # Optional
 ```
 
-Then, instantiate the service with the desired model name.
+Create a context with model and endpoint info (env defaults are supported):
 
 ```typescript
-import { OllamaService } from '@jasonnathan/llm-core';
+import { createOllamaContext } from '@jasonnathan/llm-core';
 
-// The model name is required. Endpoint and API key are read from .env by default.
-const ollama = new OllamaService('llama3:8b-instruct-q8_0');
+const ctx = createOllamaContext({
+  ollama: { model: 'llama3:8b-instruct-q8_0' },
+  pipeline: { retries: 2, timeout: 12_000 },
+  // logger?: your ILogger
+});
 ```
 
 ### `generatePromptAndSend<T>()`
@@ -70,10 +71,10 @@ This is the primary method for sending a request to the Ollama chat API and rece
 
 #### Example: Generating a Structured Response
 
-This example shows how to ask for a specific JSON object and have the service parse and type-check it.
+This example asks for a specific JSON object and has the Service parse and type-check it.
 
 ```typescript
-import { OllamaService } from '@jasonnathan/llm-core';
+import { createOllamaContext, generatePromptAndSend } from '@jasonnathan/llm-core';
 
 interface UserProfile {
   name: string;
@@ -81,7 +82,7 @@ interface UserProfile {
   age: number;
 }
 
-const ollama = new OllamaService('llama3:8b-instruct-q8_0');
+const ctx = createOllamaContext({ ollama: { model: 'llama3:8b-instruct-q8_0' } });
 
 async function main() {
   const systemPrompt = "You are a data extraction expert. Generate a JSON object from the user's text.";
@@ -100,7 +101,8 @@ async function main() {
   };
 
   try {
-    const profile = await ollama.generatePromptAndSend<UserProfile>(
+    const profile = await generatePromptAndSend<UserProfile>(
+      ctx,
       systemPrompt,
       userPrompt,
       options
@@ -123,17 +125,17 @@ main();
 
 ### `embedTexts()`
 
-This method generates vector embeddings for an array of text inputs.
+This function generates vector embeddings for an array of text inputs using your context.
 
 - **`inputs`**: An array of strings to be embedded.
 
 #### Example: Creating Embeddings
 
 ```typescript
-import { OllamaService } from '@jasonnathan/llm-core';
+import { createOllamaContext, embedTexts } from '@jasonnathan/llm-core';
 
 // Use a model specifically trained for embeddings
-const ollama = new OllamaService('all-minilm:l6-v2');
+const ctx = createOllamaContext({ ollama: { model: 'all-minilm:l6-v2' } });
 
 async function main() {
   const texts = [
@@ -142,7 +144,7 @@ async function main() {
   ];
 
   try {
-    const embeddings = await ollama.embedTexts(texts);
+    const embeddings = await embedTexts(ctx, texts);
     console.log("Generated embeddings:", embeddings.length); // Output: 2
     console.log("Dimension:", embeddings[0].length);
   } catch (error) {
@@ -155,7 +157,7 @@ main();
 
 ### Advanced Usage: Custom Validation
 
-You can provide a `customCheck` function to add your own validation logic to the response. If the check fails, the service will automatically retry the request up to 3 times.
+You can provide a `customCheck` function to add your own validation logic to the response. If the check fails, the Service does not accept the response and, depending on your `ctx.pipeline.retries`, may retry.
 
 ```typescript
 const customCheck = (response: UserProfile): UserProfile | boolean => {
@@ -166,7 +168,8 @@ const customCheck = (response: UserProfile): UserProfile | boolean => {
   return false; // Trigger a retry
 };
 
-const profile = await ollama.generatePromptAndSend<UserProfile>(
+const profile = await generatePromptAndSend<UserProfile>(
+  ctx,
   systemPrompt,
   userPrompt,
   options,
@@ -174,6 +177,6 @@ const profile = await ollama.generatePromptAndSend<UserProfile>(
 );
 ```
 
-### Error Handling
+### Error Handling & Policies
 
-The `OllamaService` is designed to be resilient. It will retry failed network requests up to 3 times before throwing an error. Errors can occur due to network issues, invalid API responses, or failed custom checks. Always wrap your calls in a `try...catch` block to handle potential failures.
+The Service applies `withErrorHandling`, `withTimeout`, and `withRetry` within a pipeline. Network or parsing issues are logged via your `logger`; pauses (like timeouts) short‑circuit gracefully. Tune `ctx.pipeline.retries` and `ctx.pipeline.timeout` per run.

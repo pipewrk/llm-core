@@ -1,6 +1,6 @@
-# CosineDropChunker Developer Guide
+# Semantic Chunker Guide
 
-This guide covers the advanced text and markdown chunking capabilities provided by the `CosineDropChunker` and `markdownSplitter`. This system is designed to intelligently split content based on semantic meaning rather than fixed sizes, leading to more coherent and contextually relevant chunks.
+This guide covers advanced text and markdown chunking using a pipeline-based cosine-distance strategy (`cosineDropChunker`) and the `markdownSplitter`. It splits content at natural topic boundaries, producing coherent chunks ideal for RAG systems.
 
 This is ideal for preparing data for Retrieval-Augmented Generation (RAG) systems, where contextually rich chunks lead to better search results and more accurate LLM responses.
 
@@ -8,7 +8,7 @@ This is ideal for preparing data for Retrieval-Augmented Generation (RAG) system
 
 ```mermaid
 flowchart TD
-    subgraph CosineDropChunker
+    subgraph CosineDrop
         A[Input Text/Markdown] --> B{Initial Segmentation}
         B -- Markdown --> B1[markdownSplitter]
         B -- Plain Text --> B2[Sentence Splitter]
@@ -27,9 +27,9 @@ flowchart TD
 
 ## Core Concepts
 
-- **Semantic Chunking**: Traditional chunking splits text by character count, which can awkwardly break sentences or separate related ideas. Semantic chunking analyzes the topics within the text and splits it at points where the topic changes.
-- **`CosineDropChunker`**: This is the core component. It works by generating vector embeddings for small, sliding windows of text. It then calculates the cosine similarity between adjacent windows. A sharp "drop" in similarity (a high cosine distance) indicates a change in topic, which becomes a natural boundary for a new chunk.
-- **`markdownSplitter`**: A powerful preprocessor for the chunker. Instead of treating markdown as plain text, it parses the document's structure (headings, lists, code blocks, tables) and creates initial segments that respect this structure. This ensures that related markdown elements stay together.
+- **Semantic Chunking**: Traditional chunking splits text by character count, which can awkwardly break sentences or separate related ideas. Semantic chunking analyzes topic changes and splits where cosine distance spikes.
+- **`cosineDropChunker`**: Functional, pipeline-based chunker. Generates embeddings for sliding windows, computes cosine distances, selects a percentile threshold, and splits. Uses helpers like `withAlternatives` to fall back safely.
+- **`markdownSplitter`**: Parses markdown structure (headings, lists, code blocks, tables) to create initial segments that respect document structure.
 
 ---
 
@@ -60,25 +60,20 @@ main();
 
 ---
 
-## `CosineDropChunker`
+## `cosineDropChunker`
 
-This is the main class for performing semantic chunking.
-
-### Initialization
-
-The chunker requires an `EmbedFunction` during initialization. This function is responsible for converting an array of text strings into vector embeddings. You can provide this using a service like `OllamaService` or `OpenAIService`.
+Functional chunker that requires an `EmbedFunction` inside a context object. The context lets you inject your own logger and timeouts/retries.
 
 ```typescript
-import { CosineDropChunker, OllamaService } from '@jasonnathan/llm-core';
+import { cosineDropChunker } from '@jasonnathan/llm-core';
+import { createOllamaContext, embedTexts } from '@jasonnathan/llm-core';
 
-// 1. Initialize a service that can create embeddings
-const ollama = new OllamaService('mxbai-embed-large'); // Use a dedicated embedding model
+// 1) Build an embedding context (Ollama example)
+const svc = createOllamaContext({ ollama: { model: 'all-minilm:l6-v2' } });
+const embed = (texts: string[]) => embedTexts(svc, texts);
 
-// 2. Create the embedding function
-const embedFn = (texts: string[]) => ollama.embedTexts(texts);
-
-// 3. Instantiate the chunker
-const chunker = new CosineDropChunker(embedFn);
+// 2) Build chunker context
+const ctx = { logger: console, embed, pipeline: { retries: 0, timeout: 0 } };
 ```
 
 ### Chunking Markdown
@@ -89,7 +84,7 @@ This is the recommended approach for documentation or any markdown-based content
 async function chunkMarkdown() {
   const markdownContent = await fs.readFile('README.md', 'utf-8');
 
-  const chunks = await chunker.chunk(markdownContent, {
+  const chunks = await cosineDropChunker(ctx, markdownContent, {
     type: 'markdown',
     breakPercentile: 95, // Split only at the most significant topic changes
     minChunkSize: 300,
@@ -109,7 +104,7 @@ For unstructured text, the chunker will split the content by sentences as its in
 async function chunkText() {
   const textContent = "This is the first sentence. This is the second one. A third sentence provides new context and talks about something different.";
 
-  const chunks = await chunker.chunk(textContent, {
+  const chunks = await cosineDropChunker(ctx, textContent, {
     type: 'text',
     breakPercentile: 90,
     bufferSize: 2, // Use a window of 2 sentences for similarity checks
@@ -128,3 +123,15 @@ async function chunkText() {
 - **`maxChunkSize`**: `number`. The maximum character length for a chunk. If a chunk exceeds this, it will be split. Defaults to `2000`.
 - **`overlapSize`**: `number`. The number of segments from the end of a chunk to include at the start of the next chunk to maintain context. Defaults to `1`.
 - **`useHeadingsOnly`** (markdown only): `boolean`. If `true`, groups all content under the preceding heading, creating larger, more structured chunks. Defaults to `false`.
+
+### Types
+
+```ts
+type EmbedFunction = (texts: string[]) => Promise<number[][]>;
+
+type ChunkerContext = {
+  logger?: { info?: (s: string) => void; warn?: (s: string) => void; error?: (e: unknown) => void };
+  pipeline?: { retries?: number; timeout?: number };
+  embed: EmbedFunction;
+};
+```

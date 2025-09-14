@@ -223,50 +223,42 @@ TL;DR
 - `stream(initial, [resume])` yields `{progress|pause|done}` and provides a resume token you can feed back to `stream`/`next`.
 - `next(initial, [resume])` advances one step at a time for UI/CLI drivers.
 
-### `OllamaService` and `OpenAIService`
+### OpenAI and Ollama services
 
-These services provide a consistent interface for interacting with Ollama and OpenAI APIs, handling requests, retries, and error handling. `OllamaService` is particularly powerful when paired with models that support structured JSON output.
+Functional, pipeline-aware facades for OpenAI and Ollama with typed JSON responses and embeddings. Configure context once and call helpers.
 
-**Usage:**
+```ts
+import { createOllamaContext, generatePromptAndSend } from "@jasonnathan/llm-core";
 
-```typescript
-import { OllamaService } from "@jasonnathan/llm-core";
-
-const ollama = new OllamaService("llama3:8b-instruct-q8_0");
+const ctx = createOllamaContext({ ollama: { model: "llama3:8b-instruct-q8_0" } });
 
 async function getGreeting() {
-  const response = await ollama.generatePromptAndSend(
+  const response = await generatePromptAndSend<{ greeting: string }>(
+    ctx,
     "You are a friendly assistant.",
-    "Provide a one-sentence greeting to a new user.",
-    {}
+    "Provide a JSON greeting: {greeting}",
+    { schema: { type: "object", properties: { greeting: { type: "string" } }, required: ["greeting"] } }
   );
-  console.log(response);
+  console.log(response.greeting);
 }
 ```
 
-For detailed usage, including structured JSON responses and embeddings, see the **[OllamaService Developer Guide](./OLLAMA_SERVICE.md)**.
+For detailed usage and embeddings, see **[Ollama Facade Guide](./OLLAMA_SERVICE.md)**.
 
-### `CosineDropChunker`
+### `cosineDropChunker`
 
-The `CosineDropChunker` is a sophisticated tool for splitting text or markdown based on semantic similarity. Instead of using fixed sizes, it finds natural breaks in the content's topics, resulting in more contextually coherent chunks. This is ideal for preparing data for RAG systems.
+Split text or markdown by semantic similarity using a functional, context-driven chunker.
 
-**Usage:**
+```ts
+import { cosineDropChunker, createOllamaContext, embedTexts } from "@jasonnathan/llm-core";
 
-```typescript
-import { CosineDropChunker, OllamaService } from "@jasonnathan/llm-core";
-
-const ollama = new OllamaService("mxbai-embed-large");
-const embedFn = (texts: string[]) => ollama.embedTexts(texts);
-
-const chunker = new CosineDropChunker(embedFn);
+const svc = createOllamaContext({ ollama: { model: "all-minilm:l6-v2" } });
+const embed = (texts: string[]) => embedTexts(svc, texts);
+const ctx = { embed, logger: console, pipeline: { retries: 0, timeout: 0 } };
 
 async function chunkMyMarkdown() {
-  const markdown =
-    "# Title\n\nThis is the first paragraph. A second paragraph discusses a new topic.";
-  const chunks = await chunker.chunk(markdown, {
-    type: "markdown",
-    breakPercentile: 95,
-  });
+  const markdown = "# Title\n\nThis is the first paragraph. A second paragraph discusses a new topic.";
+  const chunks = await cosineDropChunker(ctx as any, markdown, { type: "markdown", breakPercentile: 95 });
   console.log(chunks);
 }
 ```

@@ -12,7 +12,7 @@ export interface ChunkOptions {
 }
 
 export type ChunkerContext = {
-  logger?: { info?: (s: string)=>void; warn?: (s: string)=>void; error?: (e:unknown)=>void };
+  logger?: { info?: (s: string) => void; warn?: (s: string) => void; error?: (e: unknown) => void };
   pipeline?: { retries?: number; timeout?: number };
   embed: EmbedFunction;                // injected, makes this trivially mockable
 };
