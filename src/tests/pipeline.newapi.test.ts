@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { pipeline, type PipelineStep, isPipelineOutcome } from "../core/pipeline";
+import { pipeline, type PipelineStep } from "../core/pipeline";
 import { withSequence } from "src/core/helpers";
 
 describe("pipeline (new API)", () => {

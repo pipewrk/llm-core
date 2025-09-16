@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { toFile } from "openai"; // value import is fine here; type-only elsewhere
-import { openReadStream, openWriteStream, pipeResponseToFile } from "./file-utils";
+import { openReadStream, pipeResponseToFile } from "./file-utils";
 
 import type {
   IncCtx,

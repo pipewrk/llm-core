@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { fromArray, createJob, tickBatch, runBatch } from "../core/batch-openai-pipeline";
 import { Readable } from "node:stream";
 import path from "node:path";
@@ -44,7 +44,7 @@ describe("single batch pipeline e2e", () => {
     logger = new MockLogger();
   });
 
-  test("runBatch completes and processes outputs", async () => {
+  it("runBatch completes and processes outputs", async () => {
     const rows = [ { custom_id: "x1", method: "POST", url: "/v1/chat/completions", body: { model: "m", messages: [], max_tokens: 5 } } ];
     const outputLines = [ { custom_id: "x1", response: { body: { value: 42 } } } ];
     const client = fakeClientFactory(["validating","in_progress","completed"], outputLines);
@@ -55,7 +55,7 @@ describe("single batch pipeline e2e", () => {
     expect(processed[0].response.body.value).toBe(42);
   });
 
-  test("tickBatch non-blocking progression", async () => {
+  it("tickBatch non-blocking progression", async () => {
     
     const rows = [ { custom_id: "a", method: "POST", url: "/v1/embeddings", body: { model: "m", input: "hi" } } ];
     const outputLines = [ { custom_id: "a", response: { body: { embedding: [1,2,3] } } } ];

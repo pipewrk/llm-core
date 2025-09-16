@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { OpenAIBatchServiceAdapter } from "../core/batch-openai-service";
 import { Readable } from "node:stream";
 import path from "node:path";
@@ -38,7 +38,7 @@ describe("OpenAIBatchServiceAdapter", () => {
     logger = new MockLogger();
   });
 
-  test("initiateBatch then pollBatch returns outputs", async () => {
+  it("initiateBatch then pollBatch returns outputs", async () => {
     const outputs = [
       { custom_id: "c1", response: { body: { n: 1 } } },
       { custom_id: "c2", response: { body: { n: 2 } } },

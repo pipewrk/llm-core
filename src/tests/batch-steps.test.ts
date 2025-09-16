@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, mock } from "bun:test";
+import { describe, expect, it, beforeEach, mock } from "bun:test";
 import { buildInputIncrementalStep, uploadInputFileStep, createBatchStep, waitUntilTerminalOrPauseStep, captureOutputFilesStep, downloadOutputsStep, processOutputIncrementalStep } from "../core/batch-steps";
 import { MockLogger } from "./logger.mock";
 import fs from "node:fs/promises";
@@ -45,7 +45,7 @@ describe("batch steps", () => {
     };
   });
 
-  test("buildInputIncrementalStep writes lines and marks complete", async () => {
+  it("buildInputIncrementalStep writes lines and marks complete", async () => {
     const step = buildInputIncrementalStep(ctx);
   const doc0 = { jobId: "job", endpoint: "/v1/chat/completions" as const, completionWindow: "24h" as const, outDir: tmpRoot, jsonlPath: inputPath, lineCount: 0, inputComplete: false };
   const out = await step(doc0);
@@ -55,7 +55,7 @@ describe("batch steps", () => {
     expect((out as any).lineCount).toBe(2);
   });
 
-  test("uploadInputFileStep uploads", async () => {
+  it("uploadInputFileStep uploads", async () => {
     const up = uploadInputFileStep(ctx);
     const doc = { jobId: "job", endpoint: "/v1/chat/completions" as const, completionWindow: "24h" as const, outDir: tmpRoot, jsonlPath: inputPath, lineCount: 0, inputComplete: true };
     await fs.writeFile(inputPath, "{\"a\":1}\n");
@@ -65,7 +65,7 @@ describe("batch steps", () => {
     expect(client.files.create.mock.calls.length).toBe(1);
   });
 
-  test("createBatchStep creates batch", async () => {
+  it("createBatchStep creates batch", async () => {
     const step = createBatchStep(ctx);
     const doc = { jobId: "job", endpoint: "/v1/chat/completions" as const, completionWindow: "24h" as const, outDir: tmpRoot, jsonlPath: inputPath, lineCount: 2, inputComplete: true, inputFileId: "file_in_123" };
     const out = await step(doc as any);
@@ -74,7 +74,7 @@ describe("batch steps", () => {
     expect((out as any).status).toBe("validating");
   });
 
-  test("waitUntilTerminalOrPauseStep pauses then completes", async () => {
+  it("waitUntilTerminalOrPauseStep pauses then completes", async () => {
     // First call returns non-terminal -> pause
     client.batches.retrieve.mockResolvedValueOnce({ id: "batch_123", status: "in_progress" });
     const step = waitUntilTerminalOrPauseStep(ctx);
@@ -90,7 +90,7 @@ describe("batch steps", () => {
     expect((done as any).status).toBe("completed");
   });
 
-  test("captureOutputFilesStep captures ids", async () => {
+  it("captureOutputFilesStep captures ids", async () => {
     const step = captureOutputFilesStep(ctx);
     const doc = { jobId: "job", endpoint: "/v1/chat/completions" as const, completionWindow: "24h" as const, outDir: tmpRoot, jsonlPath: inputPath, lineCount: 2, inputComplete: true, inputFileId: "file_in_123", batchId: "batch_123", status: "completed" };
     const out = await step(doc as any);
@@ -98,7 +98,7 @@ describe("batch steps", () => {
     expect((out as any).outputFileId).toBe("of_1");
   });
 
-  test("downloadOutputsStep downloads file", async () => {
+  it("downloadOutputsStep downloads file", async () => {
     const step = downloadOutputsStep(ctx);
     const doc = { jobId: "job", endpoint: "/v1/chat/completions" as const, completionWindow: "24h" as const, outDir: tmpRoot, jsonlPath: inputPath, lineCount: 2, inputComplete: true, inputFileId: "file_in_123", batchId: "batch_123", status: "completed", outputFileId: "of_1" };
     const out = await step(doc as any);
@@ -108,7 +108,7 @@ describe("batch steps", () => {
     expect(content).toContain("line1");
   });
 
-  test("processOutputIncrementalStep processes chunks and pauses", async () => {
+  it("processOutputIncrementalStep processes chunks and pauses", async () => {
     // Prepare output file with 3 lines
     const outputPath = path.join(tmpRoot, "job.output.jsonl");
     const lines = Array.from({ length: 5 }, (_, i) => JSON.stringify({ custom_id: `c${i}`, response: { body: { v: i } } }));

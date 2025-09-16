@@ -1,4 +1,5 @@
-import { isBun, isDeno, isNode, isCloudflareWorkers, isBrowser } from "../core/runtime";
+import {describe, it, expect} from "bun:test";
+import { isDeno, isNode, isCloudflareWorkers, isBrowser } from "../core/runtime";
 
 const originalGlobals: Record<string, any> = {};
 
@@ -13,19 +14,19 @@ function withGlobal(key: string, value: any, fn: () => void) {
 }
 
 describe("runtime detection", () => {
-  test("isNode baseline true", () => {
+  it("isNode baseline true", () => {
     expect(isNode()).toBe(true);
   });
 
   // Skipping isBun injection because some environments mark global properties non-configurable.
 
-  test("isDeno when Deno present", () => {
+  it("isDeno when Deno present", () => {
     withGlobal("Deno", {}, () => {
       expect(isDeno()).toBe(true);
     });
   });
 
-  test("isBrowser when window+document present", () => {
+  it("isBrowser when window+document present", () => {
     withGlobal("window", {}, () => {
       withGlobal("document", {}, () => {
         expect(isBrowser()).toBe(true);
@@ -33,7 +34,7 @@ describe("runtime detection", () => {
     });
   });
 
-  test("isCloudflareWorkers when caches+fetch present", () => {
+  it("isCloudflareWorkers when caches+fetch present", () => {
     withGlobal("caches", {}, () => {
       withGlobal("fetch", () => {}, () => {
         expect(isCloudflareWorkers()).toBe(true);

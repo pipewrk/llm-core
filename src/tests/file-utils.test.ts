@@ -1,4 +1,4 @@
-import {jest, describe, test, expect} from "bun:test";
+import {jest, describe, it, expect} from "bun:test";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,7 +31,7 @@ const logger = {
 describe("file-utils", () => {
   const base = mkdtempSync(join(tmpdir(), "llm-fu-"));
 
-  test("convertHtmlToPlainText valid + passthrough", () => {
+  it("convertHtmlToPlainText valid + passthrough", () => {
     const html = "<div><p>Hello <b>World</b></p></div>";
     const txt = convertHtmlToPlainText(html);
     expect(txt.toLowerCase()).toContain("hello world");
@@ -39,13 +39,13 @@ describe("file-utils", () => {
     expect(plain).toBe("Just text");
   });
 
-  test("ensureDirectory creates when missing", () => {
+  it("ensureDirectory creates when missing", () => {
     const dir = join(base, "newdir");
     ensureDirectory(dir, logger as any);
     expect(existsSync(dir)).toBe(true);
   });
 
-  test("read/write async + sync helpers", async () => {
+  it("read/write async + sync helpers", async () => {
     const f = join(base, "a.txt");
     writeFileSync(f, "content", "utf-8");
     expect(readFileContents(f)).toBe("content");
@@ -53,7 +53,7 @@ describe("file-utils", () => {
     expect(await readFileContentsAsync(f)).toBe("new");
   });
 
-  test("saveJsonl and readJsonlFile", () => {
+  it("saveJsonl and readJsonlFile", () => {
     const dir = join(base, "jsonl");
     mkdirSync(dir);
     saveJsonl(dir, "data", [{ a: 1 }, { b: 2 }], logger as any);
@@ -62,7 +62,7 @@ describe("file-utils", () => {
     expect(rows.length).toBe(2);
   });
 
-  test("getDirContents filters extensions", () => {
+  it("getDirContents filters extensions", () => {
     const dir = join(base, "exts");
     mkdirSync(dir);
     writeFileSync(join(dir, "a.md"), "# A", "utf-8");
@@ -72,7 +72,7 @@ describe("file-utils", () => {
     expect(md.length).toBe(1);
   });
 
-  test("copyFile and getQaPath", async () => {
+  it("copyFile and getQaPath", async () => {
     const src = join(base, "src.txt");
     writeFileSync(src, "hello", "utf-8");
     const dst = join(base, "copied", "dst.txt");
@@ -81,7 +81,7 @@ describe("file-utils", () => {
     expect(getQaPath(dst, "jsonl").endsWith("_qa.jsonl")).toBe(true);
   });
 
-  test("convertJsonToJsonl + checkExistingQa (jsonl first)", () => {
+  it("convertJsonToJsonl + checkExistingQa (jsonl first)", () => {
     const dir = join(base, "qa1");
     mkdirSync(dir);
     const baseFile = join(dir, "f.txt");
@@ -92,7 +92,7 @@ describe("file-utils", () => {
     expect(found.length).toBe(2);
   });
 
-  test("checkExistingQa converts json -> jsonl", () => {
+  it("checkExistingQa converts json -> jsonl", () => {
     const dir = join(base, "qa2");
     mkdirSync(dir);
     const baseFile = join(dir, "g.txt");
@@ -104,7 +104,7 @@ describe("file-utils", () => {
     expect(existsSync(getQaPath(baseFile, "jsonl"))).toBe(true);
   });
 
-  test("getParsedOutputFiles + processParsedFiles", () => {
+  it("getParsedOutputFiles + processParsedFiles", () => {
     const dir = join(base, "parsed");
     mkdirSync(dir);
     const md = join(dir, "one.md");
@@ -117,7 +117,7 @@ describe("file-utils", () => {
     expect(processed[0].jsonData.length).toBe(1);
   });
 
-  test("getParsedOutputFiles warns when jsonl missing", () => {
+  it("getParsedOutputFiles warns when jsonl missing", () => {
     const dir = join(base, "parsed-miss");
     mkdirSync(dir);
     const md = join(dir, "two.md");
@@ -127,21 +127,21 @@ describe("file-utils", () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
-  test("removeFile succeeds", () => {
+  it("removeFile succeeds", () => {
     const f = join(base, "del.txt");
     writeFileSync(f, "x", "utf-8");
     expect(removeFile(f, logger as any)).toBe(true);
     expect(existsSync(f)).toBe(false);
   });
 
-  test("prepareFormData Node branch", () => {
+  it("prepareFormData Node branch", () => {
     const f = join(base, "upload.txt");
     writeFileSync(f, "u", "utf-8");
     const fd = prepareFormData(f);
     expect(fd).toBeInstanceOf(FormData);
   });
 
-  test("fetchJson uses uFetch", async () => {
+  it("fetchJson uses uFetch", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => new Response(JSON.stringify({ v: 42 }), { headers: { "content-type": "application/json" } })) as any;
     const data = await fetchJson<{ v: number }>("http://x", { method: "GET" });

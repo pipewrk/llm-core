@@ -1,3 +1,4 @@
+import {describe, it, expect} from "bun:test";
 import { fromAsync, createJob, tickBatch } from "../core/batch-openai-pipeline";
 import type { Endpoint } from "../types/batch-openai";
 
@@ -29,7 +30,7 @@ class FakeBatches {
 class FakeOpenAI { files = new FakeFiles(); batches = new FakeBatches(this.files, ["validating","in_progress","completed"]); }
 
 describe("batch pipeline async source", () => {
-  test("tickBatch advances with fromAsync context", async () => {
+  it("tickBatch advances with fromAsync context", async () => {
     const src: AsyncIterable<any> = {
       [Symbol.asyncIterator]() {
         let done = false;

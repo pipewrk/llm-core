@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import {
   markdownSplitter,
   groupMarkdownSegmentsByHeadings,
@@ -18,12 +18,12 @@ describe("Markdown Splitter", () => {
     chunks = markdownSplitter(mdDoc);
   });
 
-  test("should return chunks", () => {
+  it("should return chunks", () => {
     expect(Array.isArray(chunks)).toBe(true);
     expect(chunks.length).toBeGreaterThan(0);
   });
 
-  test("should include at least one heading and one html-looking block", () => {
+  it("should include at least one heading and one html-looking block", () => {
     const htmlLike = chunks.some(
       (c) => c.includes("<table>") || c.includes("</td>")
     );
@@ -34,7 +34,7 @@ describe("Markdown Splitter", () => {
     expect(headingLike).toBe(true);
   });
 
-  test("should log first few chunks for inspection", () => {
+  it("should log first few chunks for inspection", () => {
     console.log(
       chunks.slice(0, 5).map((c, i) => ({
         index: i,
@@ -43,12 +43,12 @@ describe("Markdown Splitter", () => {
     );
   });
 
-  test("should contain the root heading", () => {
+  it("should contain the root heading", () => {
     const main = chunks.find((c) => c.includes("Master GitHub markdown"));
     expect(main).toBeDefined();
   });
 
-  test("should include numbered usage tips as list", () => {
+  it("should include numbered usage tips as list", () => {
     const numbered = chunks.find(
       (c) =>
         c.includes("1. Use HTML tags") && c.includes("2. Use either backticks")
@@ -56,7 +56,7 @@ describe("Markdown Splitter", () => {
     expect(numbered).toBeDefined();
   });
 
-  test("should preserve blockquote formatting", () => {
+  it("should preserve blockquote formatting", () => {
     const quote = chunks.find(
       (c) =>
         c.includes("> This is an intended blockquote") &&
@@ -65,40 +65,40 @@ describe("Markdown Splitter", () => {
     expect(quote).toBeDefined();
   });
 
-  test("should extract JSON code block inside <table>", () => {
+  it("should extract JSON code block inside <table>", () => {
     const json = chunks.find((c) => c.includes('"username": "marcoeidinger"'));
     expect(json).toBeDefined();
   });
 
-  test("should extract Swift code block from comparison table", () => {
+  it("should extract Swift code block from comparison table", () => {
     const swift = chunks.find((c) =>
       c.includes('public var test: String = "Universe"')
     );
     expect(swift).toBeDefined();
   });
 
-  test("should include markdown-defined table row text", () => {
+  it("should include markdown-defined table row text", () => {
     const mdTable = chunks.find((c) =>
       c.includes('"password_hash": "$2a$10$uhUIUmVWVnrBWx9rrDWhS')
     );
     expect(mdTable).toBeDefined();
   });
 
-  test("should extract heading block with 'Bad'", () => {
+  it("should extract heading block with 'Bad'", () => {
     const bad = chunks.find(
       (c) => c.includes("# Bad") || c.includes("## Markdown defined table")
     );
     expect(bad).toBeDefined();
   });
 
-  test("should retain HTML code block structure in last table", () => {
+  it("should retain HTML code block structure in last table", () => {
     const htmlCode = chunks.find((c) =>
       c.includes('"created_at": "2021-02-097T20:45:26.433Z"')
     );
     expect(htmlCode).toBeDefined();
   });
 
-  test("should return heading-grouped chunks when useHeadingsOnly is true", () => {
+  it("should return heading-grouped chunks when useHeadingsOnly is true", () => {
     const simpleMd = `
 # A
 Para 1.
@@ -122,12 +122,12 @@ Para 2.
     expect(result[1]).toContain("Para 2.");
   });
 
-  test("should not include heading levels greater than 6 as headers", () => {
+  it("should not include heading levels greater than 6 as headers", () => {
     const tooDeep = chunks.find((c) => c.startsWith("#######"));
     expect(tooDeep).toBeUndefined();
   });
 
-  test("merges short heading chunk forward into next chunk", () => {
+  it("merges short heading chunk forward into next chunk", () => {
     const chunks: MarkdownChunk[] = [
       { text: "# Tiny Heading", headerPath: ["A"] },
       { text: "Next content here", headerPath: ["A"] },
@@ -140,14 +140,14 @@ Para 2.
     expect(result[0].text).toContain("Next content here");
   });
 
-  test("should wrap code blocks in triple backticks", () => {
+  it("should wrap code blocks in triple backticks", () => {
     const code = chunks.find(
       (c) => c.includes("```") && c.includes("public var test")
     );
     expect(code).toBeDefined();
   });
 
-  test("minSegmentLength merges tiny segments below threshold", () => {
+  it("minSegmentLength merges tiny segments below threshold", () => {
     const simpleMd = `Short.\n\nAlso short.`;
     const result = markdownSplitter(simpleMd, { minChunkSize: 20 });
     expect(result.length).toBe(1);
@@ -155,7 +155,7 @@ Para 2.
     expect(result[0]).toContain("Also short.");
   });
 
-  test("minSegmentLength=5 retains separate chunks when above threshold", () => {
+  it("minSegmentLength=5 retains separate chunks when above threshold", () => {
     const simpleMd = `### First\n\nShort.\n\n### Second\n\nAlso short.`;
     const result = markdownSplitter(simpleMd, { minChunkSize: 5 });
     expect(result.length).toBe(2);
@@ -165,7 +165,7 @@ Para 2.
 });
 
 describe("groupMarkdownSegmentsByHeadings", () => {
-  test("groups paragraphs under headings with correct headerPath", () => {
+  it("groups paragraphs under headings with correct headerPath", () => {
     const segments: MarkdownSegment[] = [
       { type: "heading", text: "Intro", headerPath: ["Intro"] },
       { type: "paragraph", text: "One", headerPath: ["Intro"] },
@@ -185,7 +185,7 @@ describe("groupMarkdownSegmentsByHeadings", () => {
     expect(chunks[1].text).toMatch("Three");
   });
 
-  test("still includes trailing segments after final heading", () => {
+  it("still includes trailing segments after final heading", () => {
     const segments: MarkdownSegment[] = [
       { type: "heading", text: "Top", headerPath: ["Top"] },
       { type: "paragraph", text: "Alpha", headerPath: ["Top"] },
@@ -199,7 +199,7 @@ describe("groupMarkdownSegmentsByHeadings", () => {
     expect(chunks[0].text).toContain("Alpha");
     expect(chunks[0].text).toContain("Beta");
   });
-  test("handles segments with no headings at all", () => {
+  it("handles segments with no headings at all", () => {
     const segments: MarkdownSegment[] = [
       { type: "paragraph", text: "One", headerPath: [] },
       { type: "paragraph", text: "Two", headerPath: [] },
@@ -212,7 +212,7 @@ describe("groupMarkdownSegmentsByHeadings", () => {
     expect(chunks[0].text).toContain("Two");
   });
 
-  test("handles consecutive headings with no body", () => {
+  it("handles consecutive headings with no body", () => {
     const segments: MarkdownSegment[] = [
       { type: "heading", text: "One", headerPath: ["One"] },
       { type: "heading", text: "Two", headerPath: ["Two"] },
@@ -230,7 +230,7 @@ describe("groupMarkdownSegmentsByHeadings", () => {
 });
 
 describe("enforceChunkSizeBounds", () => {
-  test("splits long chunks into multiple", () => {
+  it("splits long chunks into multiple", () => {
     const chunks: MarkdownChunk[] = [
       {
         text: "a".repeat(5000),
@@ -243,7 +243,7 @@ describe("enforceChunkSizeBounds", () => {
     expect(final.every((c) => c.headerPath[0] === "Long")).toBe(true);
   });
 
-  test("merges small chunk into previous if same headerPath", () => {
+  it("merges small chunk into previous if same headerPath", () => {
     const chunks: MarkdownChunk[] = [
       { text: "Long enough", headerPath: ["Same"] },
       { text: "tiny", headerPath: ["Same"] },
@@ -255,7 +255,7 @@ describe("enforceChunkSizeBounds", () => {
     expect(final[0].text).toContain("tiny");
   });
 
-  test("merges small chunk into next if same headerPath", () => {
+  it("merges small chunk into next if same headerPath", () => {
     const chunks: MarkdownChunk[] = [
       { text: "tiny", headerPath: ["Same"] },
       { text: "Big chunk follows", headerPath: ["Same"] },
@@ -267,7 +267,7 @@ describe("enforceChunkSizeBounds", () => {
     expect(final[0].text).toContain("Big chunk follows");
   });
 
-  test("keeps small chunk if it cannot merge safely", () => {
+  it("keeps small chunk if it cannot merge safely", () => {
     const chunks: MarkdownChunk[] = [
       { text: "tiny", headerPath: ["A"] },
       { text: "long enough", headerPath: ["B"] },
@@ -278,7 +278,7 @@ describe("enforceChunkSizeBounds", () => {
     expect(final[0].text).toBe("tiny"); // fallback to include
   });
 
-  test("merges alternating small chunks based on headerPath match", () => {
+  it("merges alternating small chunks based on headerPath match", () => {
     const chunks: MarkdownChunk[] = [
       { text: "a", headerPath: ["Same"] },
       { text: "b", headerPath: ["Other"] },
@@ -288,7 +288,7 @@ describe("enforceChunkSizeBounds", () => {
     const final = enforceChunkSizeBounds(chunks, 5, 1000);
     expect(final.length).toBe(3); // none can be safely merged
   });
-  test("keeps small chunk when no merge options are viable", () => {
+  it("keeps small chunk when no merge options are viable", () => {
     const chunks: MarkdownChunk[] = [
       { text: "Long enough content here", headerPath: ["One"] },
       { text: "x", headerPath: ["Two"] },
@@ -298,7 +298,7 @@ describe("enforceChunkSizeBounds", () => {
     expect(final.length).toBe(2);
     expect(final[1].text).toBe("x"); // Should be preserved despite not meeting size
   });
-  test("does not split if chunk is exactly maxSize", () => {
+  it("does not split if chunk is exactly maxSize", () => {
     const chunks: MarkdownChunk[] = [
       { text: "x".repeat(2000), headerPath: ["Limit"] },
     ];
@@ -310,17 +310,17 @@ describe("enforceChunkSizeBounds", () => {
 });
 
 describe("extractText", () => {
-  test("extracts text from a simple text node", () => {
+  it("extracts text from a simple text node", () => {
     const node = { type: "text", value: "Hello World" };
     expect(extractText(node)).toBe("Hello World");
   });
 
-  test("extracts inlineCode", () => {
+  it("extracts inlineCode", () => {
     const node = { type: "inlineCode", value: "code()" };
     expect(extractText(node)).toBe("`code()`");
   });
 
-  test("extracts from emphasis and strong with children", () => {
+  it("extracts from emphasis and strong with children", () => {
     const node = {
       type: "strong",
       children: [
@@ -331,7 +331,7 @@ describe("extractText", () => {
     expect(extractText(node)).toBe("**Bold*Italic***");
   });
 
-  test("returns heading with direct children when text is present", () => {
+  it("returns heading with direct children when text is present", () => {
     const heading = {
       type: "heading",
       depth: 2,
@@ -340,7 +340,7 @@ describe("extractText", () => {
     expect(extractText(heading)).toBe("## Title");
   });
 
-  test("recovers fallback paragraph if heading has no text", () => {
+  it("recovers fallback paragraph if heading has no text", () => {
     const paragraph = {
       type: "paragraph",
       children: [{ type: "text", value: "Recovered from sibling" }],
@@ -364,7 +364,7 @@ describe("extractText", () => {
     expect(heading.position.parent.children).toEqual([heading]);
   });
 
-  test("recovers fallback text using hash formatting when heading level is 3", () => {
+  it("recovers fallback text using hash formatting when heading level is 3", () => {
     const paragraph = {
       type: "paragraph",
       children: [{ type: "text", value: "Recovered Content" }],
@@ -388,7 +388,7 @@ describe("extractText", () => {
     expect(heading.position.parent.children).toEqual([heading]);
   });
 
-  test("recovers fallback text using bold formatting when heading level is 6", () => {
+  it("recovers fallback text using bold formatting when heading level is 6", () => {
     const paragraph = {
       type: "paragraph",
       children: [{ type: "text", value: "Deep Content" }],
@@ -412,7 +412,7 @@ describe("extractText", () => {
     expect(heading.position.parent.children).toEqual([heading]);
   });
 
-  test("returns '** **' for heading with no text or fallback", () => {
+  it("returns '** **' for heading with no text or fallback", () => {
     const heading = {
       type: "heading",
       depth: 5,
@@ -428,7 +428,7 @@ describe("extractText", () => {
     expect(result).toBe("** **");
   });
 
-  test("extracts from paragraph/listItem/blockquote recursively", () => {
+  it("extracts from paragraph/listItem/blockquote recursively", () => {
     const node = {
       type: "paragraph",
       children: [
@@ -443,7 +443,7 @@ describe("extractText", () => {
     expect(extractText(node)).toBe("Start **Bold**");
   });
 
-  test("falls back to default recursive for unknown nodes", () => {
+  it("falls back to default recursive for unknown nodes", () => {
     const node = {
       type: "customNode",
       children: [
@@ -455,12 +455,12 @@ describe("extractText", () => {
     expect(extractText(node)).toBe("XY");
   });
 
-  test("returns empty string for unknown node without children", () => {
+  it("returns empty string for unknown node without children", () => {
     const node = { type: "weirdNode" };
     expect(extractText(node)).toBe("");
   });
 
-  test("fallback paragraph exists but contains no text should not return early", () => {
+  it("fallback paragraph exists but contains no text should not return early", () => {
     const paragraph = {
       type: "paragraph",
       children: [{ type: "text", value: "" }],

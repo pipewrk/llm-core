@@ -1,4 +1,4 @@
-import { test } from "bun:test";
+import { it } from "bun:test";
 import { createOllamaContext, embedTexts } from "../core/ollama-service.ts";
 import { cosineDropChunker } from "../core/chunker.ts";
 import { MockLogger } from "./logger.mock.ts";
@@ -23,10 +23,10 @@ const fixtures = [
 const endpoint = "http://localhost:11434";
 const model = "all-minilm:l6-v2";
 
-const svcCtx = createOllamaContext({ ollama: { endpoint, model } });
+const svcCtx = createOllamaContext({ endpoint, model });
 const embedFn = (texts: string[]) => embedTexts(svcCtx, texts);
 
-test("CosineDropChunker with Ollama embeddings (text + markdown)", async () => {
+it("CosineDropChunker with Ollama embeddings (text + markdown)", async () => {
 
   for (const { label, file, out, mode } of fixtures) {
     const raw = await Bun.file(file).text();

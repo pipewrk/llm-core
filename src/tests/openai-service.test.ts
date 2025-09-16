@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, it } from "bun:test";
 import { createOpenAIContext, generatePromptAndSend, __test as openaiHooks } from "../core/openai-service";
 import { MockLogger } from "./logger.mock";
 import { getEnv, setEnv } from "../core/env";
@@ -12,7 +12,7 @@ describe("OpenAI OpenAPI-style service", () => {
     logger.clear();
   });
 
-  test("createOpenAIContext uses environment variables when not overridden", () => {
+  it("createOpenAIContext uses environment variables when not overridden", () => {
     setEnv("OPENAI_ENDPOINT", "http://env-endpoint.test");
     setEnv("OPENAI_API_KEY", "test-api");
     setEnv("OPENAI_MODEL", model);
@@ -23,7 +23,7 @@ describe("OpenAI OpenAPI-style service", () => {
   expect(ctx.model).toBe(model);
   });
 
-  test("sanitizes JSON content before parsing (fenced + trailing comma)", async () => {
+  it("sanitizes JSON content before parsing (fenced + trailing comma)", async () => {
     global.fetch = Object.assign(
       mock().mockResolvedValue({
         ok: true,
@@ -45,7 +45,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(out).toEqual({ key: "value" });
   });
 
-  test("adds response_format when schema provided", async () => {
+  it("adds response_format when schema provided", async () => {
     let capturedBody: any = null;
     global.fetch = Object.assign(
       mock().mockImplementation((url: string, init: RequestInit) => {
@@ -74,7 +74,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(capturedBody?.response_format?.json_schema?.schema?.required).toContain("ok");
   });
 
-  test("logs and throws on HTTP error", async () => {
+  it("logs and throws on HTTP error", async () => {
     global.fetch = Object.assign(
       mock().mockResolvedValue({
         ok: false,
@@ -89,7 +89,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(logger.logs.error.join("\n")).toMatch(/OpenAI HTTP/);
   });
 
-  test("does not set response_format when schema missing; passes through options", async () => {
+  it("does not set response_format when schema missing; passes through options", async () => {
     let capturedBody: any = null;
     global.fetch = Object.assign(
       mock().mockImplementation((_url: string, init: RequestInit) => {
@@ -106,7 +106,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(capturedBody.temperature).toBe(0.2);
   });
 
-  test("uses provided schema_name in response_format", async () => {
+  it("uses provided schema_name in response_format", async () => {
     let capturedBody: any = null;
     global.fetch = Object.assign(
       mock().mockImplementation((_url: string, init: RequestInit) => {
@@ -123,7 +123,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(capturedBody.response_format.json_schema.name).toBe('MyShape');
   });
 
-  test("handles empty content by pausing (no throw)", async () => {
+  it("handles empty content by pausing (no throw)", async () => {
     global.fetch = Object.assign(
       mock().mockResolvedValue({ ok: true, json: mock().mockResolvedValue({ choices: [{ message: {} }] }) }),
       { preconnect: () => {} }
@@ -134,7 +134,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(typeof result).toBe('object');
   });
 
-  test("hooks: stepParseJSON factory and call-with-policies wrapper", async () => {
+  it("hooks: stepParseJSON factory and call-with-policies wrapper", async () => {
     const parsed = (await openaiHooks.stepParseJSON<{ a: number }>()({} as any)("{\"a\":1}")) as any;
     expect(parsed.a).toBe(1);
 
@@ -156,7 +156,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(res.choices?.length).toBe(1);
   });
 
-  test("should validate response with a custom check", async () => {
+  it("should validate response with a custom check", async () => {
     global.fetch = Object.assign(
       mock().mockResolvedValue({
         ok: true,
@@ -184,7 +184,7 @@ describe("OpenAI OpenAPI-style service", () => {
     expect(result).toEqual({ key: "valid" });
   });
 
-  test("should throw error if custom check fails", async () => {
+  it("should throw error if custom check fails", async () => {
     global.fetch = Object.assign(
       mock().mockResolvedValue({
         ok: true,

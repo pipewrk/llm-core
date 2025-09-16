@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, beforeAll, test } from "bun:test";
+import { beforeEach, describe, expect, beforeAll, it } from "bun:test";
 import {
   cosineDropChunker,
   // expose these tiny helpers from core/chunker.ts
@@ -32,7 +32,7 @@ describe("CosineDropChunker.chunkText", () => {
     logger.clear();
   });
 
-  test("splits into individual sentences when bufferSize=1 and breakPercentile=100", async () => {
+  it("splits into individual sentences when bufferSize=1 and breakPercentile=100", async () => {
     const embeddings = [[1], [0], [1], [0]];
     const embedFn: EmbedFunction = async (_texts) => embeddings;
     const text = "S1. S2. S3. S4.";
@@ -47,7 +47,7 @@ describe("CosineDropChunker.chunkText", () => {
     expect(chunks).toEqual(["S1.", "S2.", "S3.\nS4."]);
   });
 
-  test("returns full text when sentences <= bufferSize", async () => {
+  it("returns full text when sentences <= bufferSize", async () => {
     const embeddings = [[0], [0]];
     const embedFn: EmbedFunction = async (_texts) => embeddings;
 
@@ -64,7 +64,7 @@ describe("CosineDropChunker.chunkText", () => {
     expect(chunks).toEqual([text]);
   });
 
-  test("splits only on maximum jumps with breakPercentile=99", async () => {
+  it("splits only on maximum jumps with breakPercentile=99", async () => {
     const embeddings = [[1], [1], [0], [0]];
     const embedFn: EmbedFunction = async (_texts) => embeddings;
 
@@ -97,7 +97,7 @@ describe("CosineDropChunker with real-world text", () => {
     logger.clear();
   });
 
-  test("chunks long text into non-empty chunks", async () => {
+  it("chunks long text into non-empty chunks", async () => {
     const embedFn: EmbedFunction = async (_texts) => _texts.map(() => [1]);
 
     const options: ChunkOptions = {
@@ -117,7 +117,7 @@ describe("CosineDropChunker with real-world text", () => {
     }
   });
 
-  test("handles large unstructured text reasonably", async () => {
+  it("handles large unstructured text reasonably", async () => {
     const mockSemanticEmbedFn: EmbedFunction = async (texts) =>
       texts.map((t, i) => {
         const score = [...t].reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -157,7 +157,7 @@ describe("CosineDropChunker.chunkMarkdown", () => {
 
   const embedFn: EmbedFunction = async (_texts) => _texts.map(() => [0]);
 
-  test("chunks markdown without heading grouping", async () => {
+  it("chunks markdown without heading grouping", async () => {
     const markdown = `
 # Alpha
 
@@ -181,7 +181,7 @@ Sentence four.`;
     expect(chunks.every((c) => typeof c === "string")).toBe(true);
   });
 
-  test("chunks markdown with heading grouping", async () => {
+  it("chunks markdown with heading grouping", async () => {
     const logger = new MockLogger();
     const embeddings = [[1], [0.1], [1], [0.1]];
     const embedFn: EmbedFunction = async (_texts) => embeddings;
@@ -212,13 +212,13 @@ Sentence B1. Sentence B2.`;
 });
 
 describe("CosineDropChunker static helpers", () => {
-  test("preprocessText normalises whitespace and dashes", () => {
+  it("preprocessText normalises whitespace and dashes", () => {
     const raw = "Line1\n\nLine-  two  words";
     const out = _preprocessText(raw);
     expect(out).toBe("Line1 Line-two words");
   });
 
-  test("getSentences splits into trimmed sentences", () => {
+  it("getSentences splits into trimmed sentences", () => {
     const pre = "Hello world.  This is a test!";
     const sents = _getSentences(pre);
     expect(sents).toEqual(["Hello world.", "This is a test!"]);
@@ -232,7 +232,7 @@ describe("chunker helpers", () => {
     logger.clear();
   });
 
-  test("sGuardFew returns single chunk & warns when segments <= bufferSize", () => {
+  it("sGuardFew returns single chunk & warns when segments <= bufferSize", () => {
     const ctx = makeCtx(async () => [], logger); // dummy embedFn
     const state = {
       segments: ["A", "B"],                   // 2 segments
@@ -244,7 +244,7 @@ describe("chunker helpers", () => {
     expect(logger.logs.warn.some((w) => w.includes("not enough segments"))).toBe(true);
   });
 
-  test("sGuardFew passes through unchanged when segments > bufferSize", () => {
+  it("sGuardFew passes through unchanged when segments > bufferSize", () => {
     const ctx = makeCtx(async () => [], logger);
     const state = {
       segments: ["A", "B", "C", "D"],
@@ -256,7 +256,7 @@ describe("chunker helpers", () => {
     expect(logger.logs.warn.length).toBe(0);
   });
 
-  test("sDistances warns and emits single chunk when no valid distances computed", () => {
+  it("sDistances warns and emits single chunk when no valid distances computed", () => {
     const ctx = makeCtx(async () => [], logger);
     const state = {
       segments: ["S1", "S2", "S3"],
@@ -271,7 +271,7 @@ describe("chunker helpers", () => {
     expect(logger.logs.warn.some((w) => w.includes("cosine similarities invalid"))).toBe(true);
   });
 
-  test("sDistances produces distances and passes through segments when valid", () => {
+  it("sDistances produces distances and passes through segments when valid", () => {
     const ctx = makeCtx(async () => [], logger);
     const state = {
       segments: ["S1", "S2", "S3", "S4"],
@@ -286,7 +286,7 @@ describe("chunker helpers", () => {
     expect(logger.logs.warn.length).toBe(0);
   });
 
-  test("sThreshold logs info and sets a numeric threshold when distances present", () => {
+  it("sThreshold logs info and sets a numeric threshold when distances present", () => {
     const ctx = makeCtx(async () => [], logger);
     const state = {
       segments: ["S1", "S2", "S3"],
@@ -300,7 +300,7 @@ describe("chunker helpers", () => {
     expect(logger.logs.info.some((s) => s.includes("threshold at 50th percentile"))).toBe(true);
   });
 
-  test("sThreshold warns and sets threshold=NaN when computed value is invalid", () => {
+  it("sThreshold warns and sets threshold=NaN when computed value is invalid", () => {
     const ctx = makeCtx(async () => [], logger);
     const state = {
       segments: ["S1", "S2"],
