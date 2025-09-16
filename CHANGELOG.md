@@ -2,24 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## [Unreleased]
+## [1.8.0](https://github.com/pipewrk/llm-core/compare/v1.7.1...v1.8.0) (2025-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** internalize env module; prune prompts; document batch + service helpers
 
 ### Features
-* **batch-openai:** introduce batch pipeline orchestration with resumable steps, adapter integration and end-to-end tests.
 
-### Refactors
-* **pipeline:** remove in-stream 'done' event; centralize completion emission in helper bridge; clarify advisory resume token semantics.
-* **services:** unify fetch layer (`ufetch`) with optional raw response + conditional JSON parsing; streamline OpenAI/Ollama service request/response handling; async file ops & logging consolidation.
+* **batch-openai:** add resumable batch pipeline, steps, adapter and public types ([5779fe0](https://github.com/pipewrk/llm-core/commit/5779fe0787bb84737f1d05de19cf6da87fbc435d))
+* **batch-openai:** export batch pipeline types and remove unused prompts/env type re-exports ([29c9d49](https://github.com/pipewrk/llm-core/commit/29c9d494cb1ff2c6107c86d43192830b045f499f))
+* **similarity:** WIP ([44e4f7d](https://github.com/pipewrk/llm-core/commit/44e4f7d0364330d43e390c09a4c02ad377770e74))
 
-### Tests
-* **runtime:** add environment detection coverage.
-* **batch:** add adapter, step, async iteration, and e2e JSONL processing tests.
 
-### Internal / Chore
-* Curated public exports (hid internal env/prompts utilities; added batch pipeline helpers and type-only exports).
-* Ignore transient batch JSONL artifacts.
-
----
+* **core:** internalize env module; prune prompts; document batch + service helpers ([db97d7b](https://github.com/pipewrk/llm-core/commit/db97d7b084c3e8615bf187da2fe43bf29f46533e))
 
 ### [1.7.1](https://github.com/pipewrk/llm-core/compare/v1.7.0...v1.7.1) (2025-09-14)
 
