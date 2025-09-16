@@ -14,12 +14,20 @@ export function isPipelineOutcome<T>(v: unknown): v is PipelineOutcome<T> {
 export type PipelineStep<I, O, C = unknown> =
   (context: C) => (doc: I) => MaybePromise<O | PipelineOutcome<O>>;
 
-export type ResumeState<T> = { nextStep: number; doc: T };
+// doc is advisory; driver’s doc param overrides it
+export type ResumeState<T> = { 
+  /**
+   * Index of the next step to execute.
+   * NOTE: The engine uses the caller-provided `doc` argument as source of truth;
+   * this `doc` field is advisory (useful for persisting both together).
+   */
+  nextStep: number;
+  doc: T;
+};
 
 export type StreamEvent<T> =
   | { type: "pause";    step: number; doc: T; info: PipelineOutcome<T>; resume: ResumeState<T> }
-  | { type: "progress"; step: number; doc: T;                                         resume: ResumeState<T> }
-  | { type: "done" };
+  | { type: "progress"; step: number; doc: T; resume: ResumeState<T> };
 
 /** Public surface: input fixed to TInit; output evolves with steps. */
 export interface Pipeline<C, TInit, O = TInit> {
@@ -76,11 +84,13 @@ export function pipeline<C, TInit>(ctx: C): Pipeline<C, TInit> {
         return current as TCurrent;
       },
 
-      async *stream(
-        doc: TCurrent,
-        resume?: ResumeState<TCurrent>
-      ): AsyncGenerator<StreamEvent<TCurrent>, TCurrent, void> {
-        let current: unknown = resume?.doc ?? doc;
+     async *stream(
+       doc: TCurrent,
+       resume?: ResumeState<TCurrent>
+     ): AsyncGenerator<StreamEvent<TCurrent>, TCurrent, void> {
+       // Doc provided by the caller is the source of truth.
+       // Resume conveys *where* to re-enter (nextStep), not the doc payload.
+       let current: unknown = doc;
         let index = resume?.nextStep ?? 0;
 
         for (; index < steps.length; index++) {
@@ -106,8 +116,6 @@ export function pipeline<C, TInit>(ctx: C): Pipeline<C, TInit> {
           const token = { nextStep: index + 1, doc: current as TCurrent };
           yield { type: "progress", step: index, doc: current as TCurrent, resume: token };
         }
-
-        yield { type: "done" };
         return current as TCurrent;
       },
 

@@ -3,7 +3,7 @@ import { createOpenAIContext, generatePromptAndSend, __test as openaiHooks } fro
 import { MockLogger } from "./logger.mock";
 import { getEnv, setEnv } from "../core/env";
 
-describe("OpenAI OpenAPI-style facade", () => {
+describe("OpenAI OpenAPI-style service", () => {
   const logger = new MockLogger();
   const endpoint = "http://openai.test";
   const model = "test-model";

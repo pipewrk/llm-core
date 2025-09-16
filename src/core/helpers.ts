@@ -284,10 +284,10 @@ export function eventsFromPipeline<TInit, O>(
   queueMicrotask(async () => {
     try {
       for await (const evt of p.stream(initial)) {
-        if (evt.type === 'pause')        emitter.emit('pause', evt);
-        else if (evt.type === 'progress') emitter.emit('progress', evt);
-        else                              emitter.emit('done');
+        if (evt.type === 'pause')    emitter.emit('pause', evt);
+        else                         emitter.emit('progress', evt);
       }
+      emitter.emit('done'); // <— after loop ends
     } catch (err) {
       emitter.emit('error', err);
     }
@@ -350,9 +350,6 @@ export function pipelineToTransform<TInit, O>(
               this.push(JSON.stringify(current) + '\n');
               resumeState = res.resume;
               break;
-
-            case 'done':
-              return callback();
           }
         }
         callback();

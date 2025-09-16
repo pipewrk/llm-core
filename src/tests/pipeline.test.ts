@@ -264,32 +264,27 @@ describe("Pipeline Stream Tests", () => {
     // expect(logger.logs.error).toContain("Error in step #2: Error: Kaboom");
   });
 
-  it("should support manual control via stream().next()", async () => {
-    const p = pipeline<typeof ctx, { data: string }>(ctx)
-      .addStep((c) => appendStep(" -> Step1")(c.logger))
-      .addStep((c) => appendStep(" -> Step2")(c.logger));
+    it("supports manual control via stream().next()", async () => {
+      const p = pipeline<typeof ctx, { data: string }>(ctx)
+        .addStep((c) => appendStep(" -> Step1")(c.logger))
+        .addStep((c) => appendStep(" -> Step2")(c.logger));
 
-    const it = p.stream({ data: "Start" });
+      const it = p.stream({ data: "Start" });
 
-    const r1 = await it.next();
-    expect(r1.done).toBe(false);
-    expect((r1.value as Extract<StreamEvent<{ data: string }>, { type: "progress" }>).doc.data).toBe(
-      "Start -> Step1",
-    );
+      const r1 = await it.next();
+      if (r1.done) throw new Error("expected a yielded event");
+      if (r1.value.type !== "progress") throw new Error(`unexpected: ${r1.value.type}`);
+      expect(r1.value.doc.data).toBe("Start -> Step1");
 
-    const r2 = await it.next();
-    expect(r2.done).toBe(false);
-    expect((r2.value as Extract<StreamEvent<{ data: string }>, { type: "progress" }>).doc.data).toBe(
-      "Start -> Step1 -> Step2",
-    );
+      const r2 = await it.next();
+      if (r2.done) throw new Error("expected a yielded event");
+      if (r2.value.type !== "progress") throw new Error(`unexpected: ${r2.value.type}`);
+      expect(r2.value.doc.data).toBe("Start -> Step1 -> Step2");
 
-    const r3 = await it.next();
-    // The third next() yields the 'done' event, not completion.
-    expect(r3.done).toBe(false);
-    expect((r3.value as StreamEvent<{ data: string }>).type).toBe(
-      "done"
-    );
-  });
+      const r3 = await it.next();
+      if (!r3.done) throw new Error("expected iterator to be done");
+      expect(r3.value.data).toBe("Start -> Step1 -> Step2");
+    });
 
   it("should yield pause event and stop stream()", async () => {
     const pauseStep: PipelineStep<{ data: string }, { data: string }> =

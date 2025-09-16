@@ -3,7 +3,7 @@ import { getEnv, setEnv } from "../core/env.ts";
 import { createOllamaContext, embedTexts, generatePromptAndSend, __test as ollamaHooks } from "../core/ollama-service.ts";
 import { MockLogger } from "./logger.mock.ts";
 
-describe("Ollama facade (pipeline-based)", () => {
+describe("Ollama service (pipeline-based)", () => {
   const logger = new MockLogger();
   const endpoint = "http://ollama.test";
   const model = "test-model";
@@ -76,7 +76,7 @@ describe("Ollama facade (pipeline-based)", () => {
 
     const ctx = createOllamaContext({ logger, ollama: { endpoint, model } });
     const out = await generatePromptAndSend(ctx, "sys", "user", {} as any);
-    // Parse error is logged; pipeline pauses; no throw from facade.
+  // Parse error is logged; pipeline pauses; no throw from service.
     expect(logger.logs.error.join("\n")).toMatch(/JSON parse failed/);
   });
 

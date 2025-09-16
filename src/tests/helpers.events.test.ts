@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, mock } from "bun:test";
 import { pipeline, type PipelineStep } from "../core/pipeline";
-import { eventsFromPipeline, pipelineToTransform, tap } from "../core/helpers";
+import { eventsFromPipeline, pipelineToTransform } from "../core/helpers";
 
 describe("helpers: eventsFromPipeline and pipelineToTransform", () => {
   const ctx = { logger: { info() {}, warn() {}, error() {}, attn() {}, impt() {} }, pipeline: {} } as any;
@@ -57,37 +57,66 @@ describe("helpers: eventsFromPipeline and pipelineToTransform", () => {
     expect(pauses).toBe(1);
   });
 
-  it("pipelineToTransform pushes final done value", async () => {
-    const p = {
-      async next(_doc: { data: string }) {
-        return { done: true as const, value: { data: "final" } };
-      },
-    };
-    const tr = pipelineToTransform(p as any);
-    const outputs: string[] = [];
-    tr.on("data", (buf) => outputs.push(String(buf).trim()));
-    tr.write({ data: "x" });
-    tr.end();
-    await new Promise((r) => setTimeout(r, 5));
-    expect(outputs).toEqual([JSON.stringify({ data: "final" })]);
-  });
-
-  it("pipelineToTransform handles StreamEvent 'done' without pushing data", async () => {
+  it("pipelineToTransform does not push on pause (calls onPause and stops chunk)", async () => {
     let calls = 0;
+
+    const pauseEvt = {
+      type: "pause" as const,
+      step: 2,
+      doc: { data: "x" },
+      info: { done: false as const, reason: "processing-outputs", payload: { nextPos: 10, rows: 1 } },
+      resume: { nextStep: 2, doc: { data: "x" } },
+    };
+
     const p = {
       async next(_doc: { data: string }) {
         calls++;
-        return { type: "done" } as any;
+        return pauseEvt;
       },
     };
-    const tr = pipelineToTransform(p as any);
+
+    const onPause = mock().mockResolvedValue(undefined);
+    const tr = pipelineToTransform(p as any, onPause);
     const outputs: string[] = [];
     tr.on("data", (buf) => outputs.push(String(buf).trim()));
     tr.write({ data: "x" });
     tr.end();
     await new Promise((r) => setTimeout(r, 5));
-    expect(outputs).toEqual([]);
+
+    expect(outputs).toEqual([]);        // pause should not push
+    expect(onPause).toHaveBeenCalledTimes(1);
     expect(calls).toBe(1);
+  });
+
+  it("pipelineToTransform pushes progress docs and then final exactly once", async () => {
+    let i = 0;
+    const seq = [
+      {
+        type: "progress" as const,
+        step: 0,
+        doc: { data: "mid" },
+        resume: { nextStep: 1, doc: { data: "mid" } },
+      },
+      { done: true as const, value: { data: "final" } },
+    ];
+
+    const p = {
+      async next(_doc: { data: string }) {
+        return seq[Math.min(i++, seq.length - 1)];
+      },
+    };
+
+    const tr = pipelineToTransform(p as any);
+    const outputs: string[] = [];
+    tr.on("data", (buf) => outputs.push(String(buf).trim()));
+    tr.write({ data: "start" });
+    tr.end();
+    await new Promise((r) => setTimeout(r, 5));
+
+    expect(outputs).toEqual([
+      JSON.stringify({ data: "mid" }),
+      JSON.stringify({ data: "final" }),
+    ]);
   });
 
   it("pipelineToTransform forwards errors from next() to 'error' event", async () => {
