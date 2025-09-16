@@ -53,7 +53,9 @@ Create a context with model and endpoint info (env defaults are supported):
 import { createOllamaContext } from '@jasonnathan/llm-core';
 
 const ctx = createOllamaContext({
-  ollama: { model: 'llama3:8b-instruct-q8_0' },
+  model: 'llama3:8b-instruct-q8_0',
+  // endpoint?: defaults to OLLAMA_ENDPOINT env
+  // apiKey?: defaults to OLLAMA_API_KEY env (optional)
   pipeline: { retries: 2, timeout: 12_000 },
   // logger?: your ILogger
 });
@@ -82,7 +84,7 @@ interface UserProfile {
   age: number;
 }
 
-const ctx = createOllamaContext({ ollama: { model: 'llama3:8b-instruct-q8_0' } });
+const ctx = createOllamaContext({ model: 'llama3:8b-instruct-q8_0' });
 
 async function main() {
   const systemPrompt = "You are a data extraction expert. Generate a JSON object from the user's text.";
@@ -135,7 +137,7 @@ This function generates vector embeddings for an array of text inputs using your
 import { createOllamaContext, embedTexts } from '@jasonnathan/llm-core';
 
 // Use a model specifically trained for embeddings
-const ctx = createOllamaContext({ ollama: { model: 'all-minilm:l6-v2' } });
+const ctx = createOllamaContext({ model: 'all-minilm:l6-v2' });
 
 async function main() {
   const texts = [

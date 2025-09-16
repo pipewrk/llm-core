@@ -1,3 +1,4 @@
+import {jest, describe, test, expect} from "bun:test";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,6 @@ import {
   getDirContents,
   copyFile,
   getQaPath,
-  convertJsonToJsonl,
   readJsonlFile,
   checkExistingQa,
   getParsedOutputFiles,

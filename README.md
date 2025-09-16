@@ -233,7 +233,7 @@ Functional, pipeline-aware services for OpenAI and Ollama with typed JSON respon
 ```ts
 import { createOllamaContext, createOllamaService } from "@jasonnathan/llm-core";
 
-const ctx = createOllamaContext({ ollama: { model: "llama3:8b-instruct-q8_0" } });
+const ctx = createOllamaContext({ model: "llama3:8b-instruct-q8_0" });
 const ollama = createOllamaService(ctx);
 
 async function getGreeting() {
@@ -255,7 +255,7 @@ Split text or markdown by semantic similarity using a functional, context-driven
 ```ts
 import { cosineDropChunker, createOllamaContext, embedTexts } from "@jasonnathan/llm-core";
 
-const svc = createOllamaContext({ ollama: { model: "all-minilm:l6-v2" } });
+const svc = createOllamaContext({ model: "all-minilm:l6-v2" });
 const embed = (texts: string[]) => embedTexts(svc, texts);
 const ctx = { embed, logger: console, pipeline: { retries: 0, timeout: 0 } };
 
