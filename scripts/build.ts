@@ -47,8 +47,7 @@ async function generateExports() {
     'file-utils.ts',
     'ufetch.ts',
     'classification-service.ts',
-    'ml-service.ts',
-    'env.ts'
+    'ml-service.ts'
   ]);
   const files = entries
     .filter(d => d.isFile() && d.name.endsWith('.ts'))

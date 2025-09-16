@@ -1,8 +1,9 @@
 // File: src/logger.ts
 import winston from "winston";
+import { uFetch } from "./ufetch.ts";
 import chalk, { type ChalkInstance } from "chalk";
 import { dirname } from "path";
-import { existsSync, mkdirSync } from "fs";
+import { ensureDirectory } from "./file-utils.ts";
 import type { ILogger } from "../types/dataset.ts";
 
 /**
@@ -51,9 +52,14 @@ export class Logger implements ILogger {
   constructor(logFilePath: string, ntfyServerUrl?: string) {
     this.ntfyServerUrl = ntfyServerUrl;
     const logDir = dirname(logFilePath);
-    if (!existsSync(logDir)) {
-      mkdirSync(logDir, { recursive: true });
-    }
+    // Reuse shared directory creation logic
+    ensureDirectory(logDir, {
+      impt: () => {},
+      attn: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    });
 
     // Define custom log levels and colors
     const logLevels = {
@@ -230,17 +236,13 @@ export class Logger implements ILogger {
 
     // Synchronous fetch using require
     try {
-      const response = await fetch(this.ntfyServerUrl, {
+      const res = await uFetch<Response>(this.ntfyServerUrl, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: batchedMessage,
-      });
-
-      if (!response.ok) {
-        this.logger.error(
-          `HTTP Error when sending batched logs to Ntfy: ${response.statusText}`
-        );
-      }
+        returnRaw: true,
+      }) as Response;
+      if (!res.ok) this.logger.error(`HTTP Error when sending batched logs to Ntfy: ${res.statusText}`);
     } catch (err) {
       this.logger.error(
         `Failed to send batched logs to Ntfy: ${(err as Error).message}`
@@ -302,15 +304,13 @@ export class Logger implements ILogger {
    */
   private async sendToNtfy(message: string): Promise<void> {
     try {
-      const response = await fetch(this.ntfyServerUrl!, {
+      const res = await uFetch<Response>(this.ntfyServerUrl!, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: message,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.statusText}`);
-      }
+        returnRaw: true,
+      }) as Response;
+      if (!res.ok) throw new Error(`HTTP Error: ${res.statusText}`);
     } catch (err) {
       throw new Error(
         `Failed to send batched log to Ntfy: ${(err as Error).message}`

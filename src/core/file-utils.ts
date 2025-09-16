@@ -78,6 +78,27 @@ export function readFileContents(filePath: string): string {
 }
 
 /**
+ * Async file read leveraging Bun's zero-copy file loader when available.
+ */
+export async function readFileContentsAsync(filePath: string): Promise<string> {
+  if (typeof Bun !== "undefined") {
+    return await Bun.file(filePath).text();
+  }
+  return await import("node:fs/promises").then((m) => m.readFile(filePath, "utf-8"));
+}
+
+/**
+ * Async write using Bun.write if present; falls back to fs/promises.
+ */
+export async function writeFileContentsAsync(filePath: string, data: string): Promise<void> {
+  if (typeof Bun !== "undefined") {
+    await Bun.write(filePath, data);
+    return;
+  }
+  await import("node:fs/promises").then((m) => m.writeFile(filePath, data, "utf-8"));
+}
+
+/**
  * Saves an array of items as a JSONL file.
  *
  * The function takes a directory and filename as parameters, and
@@ -156,6 +177,25 @@ export function copyFile(source: string, destination: string): Promise<void> {
     writeStream.on("finish", resolve);
     readStream.pipe(writeStream);
   });
+}
+
+/** Open a readable file stream (thin wrapper for centralisation). */
+export function openReadStream(filePath: string) {
+  return createReadStream(filePath);
+}
+
+/** Open a writable file stream (ensures parent directory). */
+export function openWriteStream(filePath: string) {
+  mkdirSync(dirname(filePath), { recursive: true });
+  return createWriteStream(filePath);
+}
+
+/** Pipe a Response body (ReadableStream/Node stream) to a destination file. */
+export async function pipeResponseToFile(res: Response, destination: string) {
+  const { pipeline } = await import("node:stream/promises");
+  const body = res.body as unknown as NodeJS.ReadableStream; // caller ensures environment supports this
+  await pipeline(body, openWriteStream(destination));
+  return destination;
 }
 
 /**
@@ -417,16 +457,7 @@ export function prepareFormData(filePath: string): FormData {
  * @throws An Error if the HTTP response status is not OK.
  */
 
-export async function fetchJson<T>(
-  url: string,
-  options: RequestInit
-): Promise<T> {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    throw new Error(
-      `Fetch failed with status ${res.status}: ${res.statusText}`
-    );
-  }
-
-  return res.json() as Promise<T>;
+export async function fetchJson<T>(url: string, options: RequestInit): Promise<T> {
+  const result = await (await import('./ufetch.ts')).uFetch<T>(url, { ...options, parseJson: true });
+  return result as T;
 }

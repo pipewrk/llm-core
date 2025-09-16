@@ -2,6 +2,7 @@
 import { pipeline, type PipelineStep } from "./pipeline";
 import type { ILogger } from "../types/dataset";
 import { getEnv } from "./env";
+import { uFetch } from "./ufetch.ts";
 import { withErrorHandling, withRetry, withTimeout, tap } from "./helpers";
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -44,11 +45,10 @@ export type RawResponse = {
 /* Steps                                                                      */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-const stepBuildPayload: PipelineStep<
-  RequestDoc<any>,
-  (RequestInit & { __url: string }),
-  OllamaContext
-> = (ctx) => async (doc) => {
+export type Step<I, O> = PipelineStep<I, O, OllamaContext>;
+export type Req = RequestInit & { endpoint: string };
+
+const stepBuildPayload: Step<RequestDoc<any>, Req> = (ctx) => (doc) => {
   const { endpoint, model, apiKey } = ctx.ollama;
 
   const body: Record<string, unknown> = {
@@ -70,62 +70,54 @@ const stepBuildPayload: PipelineStep<
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    __url: `${endpoint.replace(/\/$/, "")}/api/chat`,
+    endpoint: `${endpoint.replace(/\/$/, "")}/api/chat`,
   };
 };
 
-const stepCallAPI: PipelineStep<
-  (RequestInit & { __url: string }),
-  RawResponse,
-  OllamaContext
-> = (ctx) => async (req) => {
-  const { __url, ...init } = req as any;
-  const res = await fetch(__url, init as RequestInit);
-
-  // Read text first, so we can log on error before JSON parse
-  const text = await res.text();
-  if (!res.ok) {
-    ctx.logger?.error?.(`Ollama HTTP ${res.status}: ${text}`);
-    throw new Error(`HTTP ${res.status}`);
-  }
-
+const stepCallAPI: Step<Req, RawResponse> = (ctx) => async (req) => {
+  const { endpoint, ...init } = req;
+  let text = "";
   try {
-    return JSON.parse(text) as RawResponse;
+    const res = (await uFetch(endpoint, { ...(init as RequestInit), returnRaw: true })) as Response;
+    text = await res.text();
+    if (!res.ok) {
+      ctx.logger?.error?.(`Ollama HTTP ${res.status}: ${text.slice(0, 200)}`);
+      throw new Error(`HTTP ${res.status}`);
+    }
+    try {
+      const json = JSON.parse(text) as RawResponse;
+      return json;
+    } catch (e) {
+      ctx.logger?.error?.(`Ollama JSON parse failed: ${(e as Error).message}. Raw: ${text.slice(0, 120)}`);
+      throw e;
+    }
   } catch (e) {
-    ctx.logger?.error?.(`Ollama: JSON parse failed — ${(e as Error).message}`);
-    throw e;
+    throw e; // handled by withErrorHandling upstream
   }
 };
 
-const stepExtractContent: PipelineStep<RawResponse, string, OllamaContext> =
-  (ctx) => async (raw) => {
-    const content = raw?.message?.content;
-    if (!content) throw new Error("Ollama: no content in response");
+const stepExtractContent: Step<RawResponse, string> = () => (raw) => {
+  const content = raw?.message?.content;
+  if (!content) throw new Error("Ollama: no content in response");
 
-    // same sanitiser logic you used before
-    let s = content.trim();
-    if (s.startsWith("```json")) {
-      s = s.slice(7);
-      if (s.endsWith("```")) s = s.slice(0, -3).trim();
-    }
-    s = s.replace(/,(\s*[\]}])/g, "$1").replace(/\s*\n\s*/g, " ");
-    if (!s.trimEnd().endsWith("}")) s += "}";
+  let s = content.trim();
+  if (s.startsWith("```json")) {
+    s = s.slice(7);
+    if (s.endsWith("```")) s = s.slice(0, -3).trim();
+  }
+  s = s.replace(/,(\s*[\]}])/g, "$1").replace(/\s*\n\s*/g, " ");
+  if (!s.trimEnd().endsWith("}")) s += "}";
 
-    return s;
-  };
+  return s;
+};
 
-const stepParseJSON = <T>(): PipelineStep<string, T, OllamaContext> =>
-  () => async (jsonStr) => JSON.parse(jsonStr) as T;
+const stepParseJSON = <T>(): Step<string, T> => () => (jsonStr) => JSON.parse(jsonStr) as T;
 
 /** Wrapper step that applies retry + timeout around the API call. */
-const stepCallWithPolicies: PipelineStep<
-  RequestInit & { __url: string },
-  RawResponse,
-  OllamaContext
-> = (c) => (payload) => withRetry(withTimeout(stepCallAPI))(c)(payload);
+const stepCallWithPolicies: Step<Req, RawResponse> = (ctx) => (payload) => withRetry(withTimeout(stepCallAPI))(ctx)(payload);
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Facade functions                                                           */
+/* Service functions                                                           */
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export async function generatePromptAndSend<T>(
@@ -141,8 +133,7 @@ export async function generatePromptAndSend<T>(
   ];
 
   const p = pipeline<OllamaContext, RequestDoc<T>>(ctx)
-    .addStep(tap<RequestDoc<T>, OllamaContext>((c) =>
-      c.logger?.info?.(`Ollama: request start (model=${c.ollama.model})`)))
+    .addStep(tap<RequestDoc<T>, OllamaContext>((c) => c.logger?.info?.(`Ollama: request start (model=${c.ollama.model})`)))
     .addStep(withErrorHandling(stepBuildPayload))
     .addStep(stepCallWithPolicies)
     .addStep(withErrorHandling(stepExtractContent))
@@ -175,44 +166,41 @@ export async function embedTexts(
 
   for (const input of inputs) {
     let lastErr: Error | null = null;
-    let i = 0;
-    for (; i < max; i++) {
+    let attempt = 0;
+    for (; attempt < max; attempt++) {
       try {
-        ctx.logger?.info?.(
-          `Ollama embed "${input.slice(0, 48)}..." (attempt ${i + 1}/${max})`
-        );
-
+        ctx.logger?.info?.(`Ollama embed "${input.slice(0, 48)}..." (attempt ${attempt + 1}/${max})`);
         const controller = new AbortController();
-        const t = ctx.pipeline?.timeout ?? 0;
-        const to = t > 0 ? setTimeout(() => controller.abort(), t) : null;
-
+        const timeoutMs = ctx.pipeline?.timeout ?? 0;
+        const to = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
         const res = await fetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify({ model: ctx.ollama.model, prompt: input }),
           signal: controller.signal,
         }).finally(() => to && clearTimeout(to!));
-
         const text = await res.text();
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
-
-        const json = JSON.parse(text) as { embedding?: number[] };
-        if (!Array.isArray(json.embedding)) {
-          throw new Error(`Invalid embed response: ${text.slice(0, 200)}`);
+        if (!res.ok) {
+          ctx.logger?.error?.(`Ollama HTTP ${res.status}: ${text.slice(0, 160)}`);
+          throw new Error(`HTTP ${res.status}`);
         }
-
-        out.push(json.embedding);
-        break; // success
+        try {
+          const parsed = JSON.parse(text) as { embedding?: number[] };
+          if (!Array.isArray(parsed.embedding)) throw new Error("missing embedding");
+          out.push(parsed.embedding);
+          break; // success
+        } catch (e) {
+          ctx.logger?.error?.(`Ollama embed JSON parse failed: ${(e as Error).message}. Raw: ${text.slice(0,120)}`);
+          throw e;
+        }
       } catch (e) {
         lastErr = e as Error;
         ctx.logger?.warn?.(`Embed failed: ${lastErr.message}`);
-        if (i + 1 < max) await new Promise((r) => setTimeout(r, 1000));
+        if (attempt + 1 < max) await new Promise((r) => setTimeout(r, 1000));
       }
     }
-    if (i === max) {
-      throw new Error(
-        `Embedding failed for "${input.slice(0, 48)}..." — ${lastErr?.message}`
-      );
+    if (attempt === max) {
+      throw new Error(`Embedding failed for "${input.slice(0, 48)}..."  ${lastErr?.message}`);
     }
   }
 
@@ -232,6 +220,35 @@ export function createOllamaContext(overrides?: Partial<OllamaContext>): OllamaC
   };
   // Allow top-level overrides to win if provided
   return { ...defaults, ...(overrides ?? {}), ollama: { ...defaults.ollama, ...(overrides?.ollama ?? {}) }, pipeline: { ...defaults.pipeline, ...(overrides?.pipeline ?? {}) } };
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Bound service helper                                                       */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export interface OllamaService {
+  embedTexts(inputs: string[]): Promise<number[][]>;
+  generatePromptAndSend<T>(
+    systemPrompt: string,
+    userPrompt: string,
+    options?: GenOptions,
+    customCheck?: (r: T) => T | boolean
+  ): Promise<T>;
+}
+
+/**
+ * Create a bound Ollama service where ctx is captured once.
+ */
+export function createOllamaService(ctx: OllamaContext): OllamaService {
+  return {
+    embedTexts: (inputs) => embedTexts(ctx, inputs),
+    generatePromptAndSend: <T>(
+      systemPrompt: string,
+      userPrompt: string,
+      options: GenOptions = {},
+      customCheck?: (r: T) => T | boolean
+    ) => generatePromptAndSend<T>(ctx, systemPrompt, userPrompt, options, customCheck),
+  };
 }
 
 // Test hooks (not re-exported from barrel index)

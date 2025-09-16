@@ -2,7 +2,7 @@ export * from "./batch-openai-service.ts"; // still public per request
 export * from "./batch-openai-pipeline.ts"; // newly exposed pipeline helpers
 // (internal) decorators removed from public export
 // (internal) file-utils removed from public export
-// env now internal
+export * from "./env.ts";
 export * from "./llm-service.ts";
 export * from "./logger.ts";
 // Export services with disambiguated names to avoid type conflicts
