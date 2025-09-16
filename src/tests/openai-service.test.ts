@@ -17,10 +17,10 @@ describe("OpenAI OpenAPI-style service", () => {
     setEnv("OPENAI_API_KEY", "test-api");
     setEnv("OPENAI_MODEL", model);
 
-    const ctx = createOpenAIContext({ logger });
-    expect(ctx.openai.endpoint).toBe(getEnv("OPENAI_ENDPOINT"));
-    expect(ctx.openai.apiKey).toBe(getEnv("OPENAI_API_KEY"));
-    expect(ctx.openai.model).toBe(model);
+  const ctx = createOpenAIContext({ logger });
+  expect(ctx.endpoint).toBe(getEnv("OPENAI_ENDPOINT"));
+  expect(ctx.apiKey).toBe(getEnv("OPENAI_API_KEY"));
+  expect(ctx.model).toBe(model);
   });
 
   test("sanitizes JSON content before parsing (fenced + trailing comma)", async () => {
@@ -34,10 +34,7 @@ describe("OpenAI OpenAPI-style service", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOpenAIContext({
-      logger,
-      openai: { endpoint, apiKey: "k", model },
-    });
+    const ctx = createOpenAIContext({ logger, endpoint, apiKey: "k", model });
 
     const out = await generatePromptAndSend<{ key: string }>(
       ctx,
@@ -65,7 +62,7 @@ describe("OpenAI OpenAPI-style service", () => {
       { preconnect: () => {} }
     ) as unknown as typeof fetch;
 
-    const ctx = createOpenAIContext({ logger, openai: { endpoint, apiKey: "k", model } });
+  const ctx = createOpenAIContext({ logger, endpoint, apiKey: "k", model });
     const out = await generatePromptAndSend<{ ok: boolean }>(
       ctx,
       "sys",
@@ -86,7 +83,7 @@ describe("OpenAI OpenAPI-style service", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOpenAIContext({ logger, openai: { endpoint, apiKey: "k", model } });
+  const ctx = createOpenAIContext({ logger, endpoint, apiKey: "k", model });
     const out = await generatePromptAndSend(ctx, "sys", "user", {} as any);
     // On HTTP error, the pipeline pauses; wrapper logs error and returns early.
     expect(logger.logs.error.join("\n")).toMatch(/OpenAI HTTP/);
@@ -102,7 +99,7 @@ describe("OpenAI OpenAPI-style service", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOpenAIContext({ logger, openai: { endpoint, apiKey: "k", model } });
+    const ctx = createOpenAIContext({ logger, endpoint, apiKey: "k", model });
     const out = await generatePromptAndSend<{ x: number }>(ctx, "sys", "user", { temperature: 0.2 });
     expect(out).toEqual({ x: 1 });
     expect(capturedBody.response_format).toBeUndefined();
@@ -120,7 +117,7 @@ describe("OpenAI OpenAPI-style service", () => {
     ) as typeof fetch;
 
     const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
-    const ctx = createOpenAIContext({ logger, openai: { endpoint, apiKey: 'k', model } });
+    const ctx = createOpenAIContext({ logger, endpoint, apiKey: 'k', model });
     const out = await generatePromptAndSend<{ ok: boolean }>(ctx, 'sys', 'user', { schema, schema_name: 'MyShape' });
     expect(out).toEqual({ ok: true });
     expect(capturedBody.response_format.json_schema.name).toBe('MyShape');
@@ -132,7 +129,7 @@ describe("OpenAI OpenAPI-style service", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOpenAIContext({ logger, openai: { endpoint, apiKey: 'k', model }, pipeline: { retries: 0 } });
+  const ctx = createOpenAIContext({ logger, endpoint, apiKey: 'k', model, pipeline: { retries: 0 } });
     const result = await generatePromptAndSend<any>(ctx, 'sys', 'user', {});
     expect(typeof result).toBe('object');
   });
@@ -149,7 +146,7 @@ describe("OpenAI OpenAPI-style service", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOpenAIContext({ openai: { endpoint, apiKey: "k", model } });
+  const ctx = createOpenAIContext({ endpoint, apiKey: "k", model });
     const res = (await openaiHooks.stepCallWithPolicies(ctx as any)({
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -175,7 +172,7 @@ describe("OpenAI OpenAPI-style service", () => {
     const customCheck = (response: { key: string }) =>
       response.key === "valid" ? response : false;
 
-    const ctx = createOpenAIContext({ logger, openai: { endpoint, apiKey: "k", model } });
+  const ctx = createOpenAIContext({ logger, endpoint, apiKey: "k", model });
     const result = await generatePromptAndSend<{ key: string }>(
       ctx,
       "system-prompt",
@@ -205,7 +202,7 @@ describe("OpenAI OpenAPI-style service", () => {
 
     await expect(
       generatePromptAndSend<{ key: string }>(
-        createOpenAIContext({ logger, openai: { endpoint, apiKey: "k", model } }),
+  createOpenAIContext({ logger, endpoint, apiKey: "k", model }),
         "system-prompt",
         "user-prompt",
         {},

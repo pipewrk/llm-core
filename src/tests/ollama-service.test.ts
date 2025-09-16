@@ -23,10 +23,10 @@ describe("Ollama service (pipeline-based)", () => {
     setEnv("OLLAMA_API_KEY", "test-api");
     setEnv("OLLAMA_MODEL", model);
 
-    const ctx = createOllamaContext({ logger });
-    expect(ctx.ollama.endpoint).toBe(getEnv("OLLAMA_ENDPOINT"));
-    expect(ctx.ollama.apiKey).toBe(getEnv("OLLAMA_API_KEY"));
-    expect(ctx.ollama.model).toBe(model);
+  const ctx = createOllamaContext({ logger });
+  expect(ctx.endpoint).toBe(getEnv("OLLAMA_ENDPOINT"));
+  expect(ctx.apiKey).toBe(getEnv("OLLAMA_API_KEY"));
+  expect(ctx.model).toBe(model);
   });
 
   test("sanitizes JSON content before parsing (fenced + trailing comma)", async () => {
@@ -40,7 +40,7 @@ describe("Ollama service (pipeline-based)", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOllamaContext({ logger, ollama: { endpoint, model } });
+  const ctx = createOllamaContext({ logger, endpoint, model });
     const out = await generatePromptAndSend<{ key: string }>(
       ctx,
       "sys",
@@ -59,7 +59,7 @@ describe("Ollama service (pipeline-based)", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOllamaContext({ logger, ollama: { endpoint, model } });
+  const ctx = createOllamaContext({ logger, endpoint, model });
     const out = await generatePromptAndSend(ctx, "sys", "user", {});
     // On HTTP error, the pipeline pauses; wrapper logs error and returns early.
     expect(logger.logs.error.join("\n")).toMatch(/Ollama HTTP/);
@@ -74,7 +74,7 @@ describe("Ollama service (pipeline-based)", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOllamaContext({ logger, ollama: { endpoint, model } });
+  const ctx = createOllamaContext({ logger, endpoint, model });
     const out = await generatePromptAndSend(ctx, "sys", "user", {} as any);
   // Parse error is logged; pipeline pauses; no throw from service.
     expect(logger.logs.error.join("\n")).toMatch(/JSON parse failed/);
@@ -115,7 +115,7 @@ describe("Ollama service (pipeline-based)", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOllamaContext({ logger, ollama: { endpoint, model }, pipeline: { retries: 0 } });
+  const ctx = createOllamaContext({ logger, endpoint, model, pipeline: { retries: 0 } });
     const result = await generatePromptAndSend<any>(ctx, 'sys', 'user', {});
     expect(typeof result).toBe('object');
   });
@@ -132,7 +132,7 @@ describe("Ollama service (pipeline-based)", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOllamaContext({ ollama: { endpoint, model } });
+  const ctx = createOllamaContext({ endpoint, model });
     const res = (await ollamaHooks.stepCallWithPolicies(ctx as any)({
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -320,11 +320,9 @@ describe("Ollama service (pipeline-based)", () => {
       { preconnect: () => {} }
     ) as typeof fetch;
 
-    const ctx = createOllamaContext({
-      logger,
-      ollama: { endpoint, model, apiKey: "sekret" },
-      pipeline: { timeout: 5 },
-    });
+    // Ensure env default does not override explicit apiKey
+    setEnv("OLLAMA_API_KEY", "");
+  const ctx = createOllamaContext({ logger, endpoint, model, apiKey: "sekret", pipeline: { timeout: 5 } });
 
     const out = await embedTexts(ctx, ["hello"]);
     expect(out).toEqual([[0.9]]);

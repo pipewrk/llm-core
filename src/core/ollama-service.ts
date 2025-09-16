@@ -9,18 +9,16 @@ import { withErrorHandling, withRetry, withTimeout, tap } from "./helpers";
 /* Context & I/O types                                                        */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-export type OllamaContext = {
+export interface OllamaContext {
   logger?: ILogger;
+  model: string;
+  endpoint?: string;
+  apiKey?: string;
   pipeline?: {
-    retries?: number;        // withRetry
-    timeout?: number;        // withTimeout (ms)
+    retries?: number;
+    timeout?: number;
   };
-  ollama: {
-    endpoint: string;        // e.g. http://localhost:11434
-    model: string;
-    apiKey?: string;         // some proxies require it (optional)
-  };
-};
+}
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -49,7 +47,9 @@ export type Step<I, O> = PipelineStep<I, O, OllamaContext>;
 export type Req = RequestInit & { endpoint: string };
 
 const stepBuildPayload: Step<RequestDoc<any>, Req> = (ctx) => (doc) => {
-  const { endpoint, model, apiKey } = ctx.ollama;
+  const endpoint = (ctx.endpoint ?? getEnv("OLLAMA_ENDPOINT")).replace(/\/$/, "");
+  const model = ctx.model;
+  const apiKey = ctx.apiKey ?? getEnv("OLLAMA_API_KEY", "");
 
   const body: Record<string, unknown> = {
     model,
@@ -70,7 +70,7 @@ const stepBuildPayload: Step<RequestDoc<any>, Req> = (ctx) => (doc) => {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    endpoint: `${endpoint.replace(/\/$/, "")}/api/chat`,
+    endpoint: `${endpoint}/api/chat`,
   };
 };
 
@@ -133,7 +133,7 @@ export async function generatePromptAndSend<T>(
   ];
 
   const p = pipeline<OllamaContext, RequestDoc<T>>(ctx)
-    .addStep(tap<RequestDoc<T>, OllamaContext>((c) => c.logger?.info?.(`Ollama: request start (model=${c.ollama.model})`)))
+  .addStep(tap<RequestDoc<T>, OllamaContext>((c) => c.logger?.info?.(`Ollama: request start (model=${c.model})`)))
     .addStep(withErrorHandling(stepBuildPayload))
     .addStep(stepCallWithPolicies)
     .addStep(withErrorHandling(stepExtractContent))
@@ -155,13 +155,14 @@ export async function embedTexts(
   ctx: OllamaContext,
   inputs: string[]
 ): Promise<number[][]> {
-  const url = `${ctx.ollama.endpoint.replace(/\/$/, "")}/api/embeddings`;
+  const endpoint = (ctx.endpoint ?? getEnv("OLLAMA_ENDPOINT")).replace(/\/$/, "");
+  const url = `${endpoint}/api/embeddings`;
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...(ctx.ollama.apiKey ? { Authorization: `Bearer ${ctx.ollama.apiKey}` } : {}),
+    ...(ctx.apiKey ? { Authorization: `Bearer ${ctx.apiKey}` } : {}),
   };
 
-  const max = Math.max(1, ctx.pipeline?.retries ?? 0) + 1;
+  const max = Math.max(1, ctx.pipeline?.retries ?? 2) + 1;
   const out: number[][] = [];
 
   for (const input of inputs) {
@@ -170,13 +171,13 @@ export async function embedTexts(
     for (; attempt < max; attempt++) {
       try {
         ctx.logger?.info?.(`Ollama embed "${input.slice(0, 48)}..." (attempt ${attempt + 1}/${max})`);
-        const controller = new AbortController();
-        const timeoutMs = ctx.pipeline?.timeout ?? 0;
+  const controller = new AbortController();
+  const timeoutMs = ctx.pipeline?.timeout ?? 12000;
         const to = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
         const res = await fetch(url, {
           method: "POST",
           headers,
-          body: JSON.stringify({ model: ctx.ollama.model, prompt: input }),
+          body: JSON.stringify({ model: ctx.model, prompt: input }),
           signal: controller.signal,
         }).finally(() => to && clearTimeout(to!));
         const text = await res.text();
@@ -209,17 +210,16 @@ export async function embedTexts(
 
 /* Convenience to build ctx from env */
 export function createOllamaContext(overrides?: Partial<OllamaContext>): OllamaContext {
-  const defaults: OllamaContext = {
+  return {
     logger: overrides?.logger,
-    pipeline: { retries: 2, timeout: 12_000, ...(overrides?.pipeline ?? {}) },
-    ollama: {
-      endpoint: overrides?.ollama?.endpoint ?? getEnv("OLLAMA_ENDPOINT"),
-      model: overrides?.ollama?.model ?? getEnv("OLLAMA_MODEL"),
-      apiKey: overrides?.ollama?.apiKey ?? getEnv("OLLAMA_API_KEY"),
+    model: overrides?.model ?? getEnv("OLLAMA_MODEL"),
+    endpoint: overrides?.endpoint ?? getEnv("OLLAMA_ENDPOINT"),
+    apiKey: overrides?.apiKey ?? getEnv("OLLAMA_API_KEY", ""),
+    pipeline: {
+      retries: overrides?.pipeline?.retries ?? 2,
+      timeout: overrides?.pipeline?.timeout ?? 12_000,
     },
   };
-  // Allow top-level overrides to win if provided
-  return { ...defaults, ...(overrides ?? {}), ollama: { ...defaults.ollama, ...(overrides?.ollama ?? {}) }, pipeline: { ...defaults.pipeline, ...(overrides?.pipeline ?? {}) } };
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */

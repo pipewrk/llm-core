@@ -8,18 +8,16 @@ import { withErrorHandling, withRetry, withTimeout, tap } from "./helpers";
  * Context & I/O types
  * -------------------------------------------------------------------------- */
 
-export type OpenAIContext = {
+export interface OpenAIContext {
   logger?: ILogger;
+  endpoint?: string;
+  apiKey?: string;
+  model: string;
   pipeline?: {
-    retries?: number;           // withRetry
-    timeout?: number;           // withTimeout (ms)
+    retries?: number;
+    timeout?: number;
   };
-  openai: {
-    endpoint: string;           // e.g. https://api.openai.com
-    apiKey: string;
-    model: string;              // e.g. gpt-4o-mini
-  };
-};
+}
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -54,7 +52,9 @@ export type Req = RequestInit & { endpoint: string };
 
 /** Build a fetch payload (RequestInit) from high-level doc. */
 const stepBuildPayload: Step<RequestDoc<any>, Req> = (ctx) => (doc) => {
-  const { endpoint, apiKey, model } = ctx.openai;
+  const endpoint = (ctx.endpoint ?? getEnv("OPENAI_ENDPOINT")).replace(/\/$/, "");
+  const apiKey = ctx.apiKey ?? getEnv("OPENAI_API_KEY");
+  const model = ctx.model ?? getEnv("OPENAI_MODEL");
 
   // Base body
   const body: Record<string, unknown> = {
@@ -170,7 +170,7 @@ export async function generatePromptAndSend<T>(
   ];
 
   const p = pipeline<OpenAIContext, RequestDoc<T>>(ctx)
-    .addStep(tap<RequestDoc<T>, OpenAIContext>((c) => c.logger?.info?.(`OpenAI: request start (model=${c.openai.model})`)))
+  .addStep(tap<RequestDoc<T>, OpenAIContext>((c) => c.logger?.info?.(`OpenAI: request start (model=${c.model})`)))
     .addStep(withErrorHandling(stepBuildPayload))
     .addStep(stepCallWithPolicies)
     .addStep(withErrorHandling(stepExtractContent))
@@ -192,14 +192,15 @@ export async function generatePromptAndSend<T>(
  * -------------------------------------------------------------------------- */
 
 export function createOpenAIContext(overrides?: Partial<OpenAIContext>): OpenAIContext {
-  const endpoint = overrides?.openai?.endpoint ?? getEnv("OPENAI_ENDPOINT");
-  const apiKey = overrides?.openai?.apiKey ?? getEnv("OPENAI_API_KEY");
-  const model = overrides?.openai?.model ?? getEnv("OPENAI_MODEL");
-
   return {
     logger: overrides?.logger,
-    pipeline: overrides?.pipeline,
-    openai: { endpoint, apiKey, model },
+    endpoint: overrides?.endpoint ?? getEnv("OPENAI_ENDPOINT"),
+    apiKey: overrides?.apiKey ?? getEnv("OPENAI_API_KEY"),
+    model: overrides?.model ?? getEnv("OPENAI_MODEL"),
+    pipeline: {
+      retries: overrides?.pipeline?.retries ?? 0,
+      timeout: overrides?.pipeline?.timeout ?? 0,
+    },
   };
 }
 
