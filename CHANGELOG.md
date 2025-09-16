@@ -2,20 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## [1.8.0](https://github.com/pipewrk/llm-core/compare/v1.7.1...v1.8.0) (2025-09-16)
+## [Unreleased]
 
-### ⚠ BREAKING CHANGES
-
-* `env` module is now internal (no longer exported). Consumers should use `createOpenAIContext` / `createOllamaContext` (and bound service helpers) instead of reading env helpers directly.
-* Removed unused `prompts` type re-exports pending future redesign.
-
-### Features
-
-* **batch-openai:** export batch pipeline helpers & public types (`fromArray`, `fromAsync`, `createJob`, `runBatch`, `tickBatch`, `BatchEnv`, `BatchJob`, `BatchState`, `ResumeToken`).
-
-### Refactors
-
-* **core:** internalize env utilities; prune public type surface; document helper usage in README and service guides.
+### Planned (not yet released)
+- Internalize `env` module (no longer exported) – use `createOpenAIContext` / `createOllamaContext` and bound service helpers instead.
+- Prune unused `prompts` type re-exports (to return later after redesign).
+- Export OpenAI batch pipeline helpers & types (`fromArray`, `fromAsync`, `createJob`, `runBatch`, `tickBatch`, `BatchEnv`, `BatchJob`, `BatchState`, `ResumeToken`).
+- Documentation: expanded README (batch section, service helpers) and updated Ollama guide.
 
 ### [1.7.1](https://github.com/pipewrk/llm-core/compare/v1.7.0...v1.7.1) (2025-09-14)
 
