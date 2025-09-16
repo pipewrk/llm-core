@@ -2,6 +2,8 @@
 
 The Pipeline module provides a lightweight way to orchestrate data‑processing workflows. A pipeline is simply a series of functions (**steps**) that each take a document and a shared **context**, transform the document, and optionally signal that execution should pause. This context‑based design lets you carry loggers, counters, caches or other shared state through every step without hard‑coding dependencies.
 
+> Note: Environment helper utilities are now internalised; construct service contexts via the exported `create*Service` / `create*Context` helpers instead of importing low-level env modules.
+
 ## Visual Flow
 
 The diagram below illustrates the pipeline model. A document enters the pipeline with its context and flows through each step in order. At any step the pipeline may _yield_ a pause outcome (for example, waiting for human input or a rate‑limit timeout). The caller can inspect the pause, act on it and then resume processing from the same point.

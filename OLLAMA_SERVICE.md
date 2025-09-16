@@ -74,7 +74,7 @@ This is the primary method for sending a request to the Ollama chat API and rece
 This example asks for a specific JSON object and has the Service parse and type-check it.
 
 ```typescript
-import { createOllamaContext, generatePromptAndSend } from '@jasonnathan/llm-core';
+import { createOllamaContext, createOllamaService } from '@jasonnathan/llm-core';
 
 interface UserProfile {
   name: string;
@@ -83,6 +83,7 @@ interface UserProfile {
 }
 
 const ctx = createOllamaContext({ ollama: { model: 'llama3:8b-instruct-q8_0' } });
+const ollama = createOllamaService(ctx);
 
 async function main() {
   const systemPrompt = "You are a data extraction expert. Generate a JSON object from the user's text.";
@@ -101,8 +102,7 @@ async function main() {
   };
 
   try {
-    const profile = await generatePromptAndSend<UserProfile>(
-      ctx,
+    const profile = await ollama.generatePromptAndSend<UserProfile>(
       systemPrompt,
       userPrompt,
       options
@@ -132,10 +132,11 @@ This function generates vector embeddings for an array of text inputs using your
 #### Example: Creating Embeddings
 
 ```typescript
-import { createOllamaContext, embedTexts } from '@jasonnathan/llm-core';
+import { createOllamaContext, createOllamaService, embedTexts } from '@jasonnathan/llm-core';
 
 // Use a model specifically trained for embeddings
 const ctx = createOllamaContext({ ollama: { model: 'all-minilm:l6-v2' } });
+const svc = createOllamaService(ctx);
 
 async function main() {
   const texts = [
@@ -144,7 +145,7 @@ async function main() {
   ];
 
   try {
-    const embeddings = await embedTexts(ctx, texts);
+  const embeddings = await embedTexts(ctx, texts); // or svc.embedTexts(texts)
     console.log("Generated embeddings:", embeddings.length); // Output: 2
     console.log("Dimension:", embeddings[0].length);
   } catch (error) {

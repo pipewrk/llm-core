@@ -2,7 +2,7 @@
   "name": "@jasonnathan/llm-core",
   "description": "Composable TypeScript toolkit for LLM pipelines, semantic chunking, and AI workflow orchestration.",
   "author": "Jason Nathan <jjnathanjr@pm.me> (https://github.com/pipewrk)",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "homepage": "https://github.com/pipewrk/llm-core",
   "bugs": {
     "url": "https://github.com/pipewrk/llm-core/issues"
@@ -39,66 +39,65 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./package.json": "./package.json",
-    "./pipeline": {
+    "./batch-openai-pipeline": {
       "import": "./dist/index.js",
-      "types": "./dist/core/pipeline.d.ts"
+      "types": "./dist/core/batch-openai-pipeline.d.ts"
     },
-    "./ollama-service": {
+    "./helpers": {
       "import": "./dist/index.js",
-      "types": "./dist/core/ollama-service.d.ts"
-    },
-    "./openai-service": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/openai-service.d.ts"
-    },
-    "./chunker": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/chunker.d.ts"
-    },
-    "./similarity-service": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/similarity-service.d.ts"
-    },
-    "./file-utils": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/file-utils.d.ts"
-    },
-    "./env": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/env.d.ts"
-    },
-    "./logger": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/logger.d.ts"
-    },
-    "./llm-service": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/llm-service.d.ts"
-    },
-    "./markdown-splitter": {
-      "import": "./dist/index.js",
-      "types": "./dist/core/markdown-splitter.d.ts"
+      "types": "./dist/core/helpers.d.ts"
     },
     "./cosine-similarity": {
       "import": "./dist/index.js",
       "types": "./dist/core/cosine-similarity.d.ts"
     },
-    "./ufetch": {
+    "./ollama-service": {
       "import": "./dist/index.js",
-      "types": "./dist/core/ufetch.d.ts"
+      "types": "./dist/core/ollama-service.d.ts"
+    },
+    "./pipeline": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/pipeline.d.ts"
+    },
+    "./similarity-greedy": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/similarity-greedy.d.ts"
+    },
+    "./llm-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/llm-service.d.ts"
+    },
+    "./openai-service": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/openai-service.d.ts"
     },
     "./runtime": {
       "import": "./dist/index.js",
       "types": "./dist/core/runtime.d.ts"
     },
+    "./batch-steps": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/batch-steps.d.ts"
+    },
+    "./logger": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/logger.d.ts"
+    },
     "./batch-openai-service": {
       "import": "./dist/index.js",
       "types": "./dist/core/batch-openai-service.d.ts"
     },
-    "./decorators": {
+    "./similarity-service": {
       "import": "./dist/index.js",
-      "types": "./dist/core/decorators.d.ts"
+      "types": "./dist/core/similarity-service.d.ts"
+    },
+    "./chunker": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/chunker.d.ts"
+    },
+    "./markdown-splitter": {
+      "import": "./dist/index.js",
+      "types": "./dist/core/markdown-splitter.d.ts"
     }
   },
   "files": [
@@ -107,10 +106,12 @@
   "type": "module",
   "scripts": {
     "exp": "ts-node ./src/test.ts ",
-    "build": "tsup && tsc -p tsconfig.build.json",
+    "build": "bun run scripts/build.ts",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "typecheck:tests": "tsc -p tsconfig.tests.json --noEmit",
     "typecheck:all": "tsc -p tsconfig.json --noEmit",
+    "prepare": "bun run build",
+    "prepublishOnly": "bun run build",
     "release": "standard-version",
     "release:patch": "standard-version --release-as patch",
     "release:minor": "standard-version --release-as minor",
@@ -124,24 +125,24 @@
     "url": "git+https://github.com/pipewrk/llm-core.git"
   },
   "devDependencies": {
-    "@swc/core": "^1.12.7",
     "@types/bun": "^1.2.17",
     "@types/cli-progress": "^3.11.6",
     "@types/html-to-text": "^9.0.4",
     "@types/winston": "^2.4.4",
+    "cli-progress": "^3.12.0",
     "standard-version": "^9.5.0",
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.0",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
     "@huggingface/transformers": "^3.4.0",
-    "ai-zero-shot-classifier": "^0.0.8",
-    "typescript": "^5.0.0"
+    "ai-zero-shot-classifier": "^0.0.8"
   },
   "dependencies": {
     "chalk": "^5.4.1",
-    "cli-progress": "^3.12.0",
     "html-to-text": "^9.0.5",
     "mdast": "^3.0.0",
+    "openai": "^5.20.3",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "sentence-splitter": "^5.0.0",
