@@ -4,11 +4,22 @@ All notable changes to this project will be documented in this file. See [standa
 
 ## [Unreleased]
 
-### Planned (not yet released)
-- Internalize `env` module (no longer exported) – use `createOpenAIContext` / `createOllamaContext` and bound service helpers instead.
-- Prune unused `prompts` type re-exports (to return later after redesign).
-- Export OpenAI batch pipeline helpers & types (`fromArray`, `fromAsync`, `createJob`, `runBatch`, `tickBatch`, `BatchEnv`, `BatchJob`, `BatchState`, `ResumeToken`).
-- Documentation: expanded README (batch section, service helpers) and updated Ollama guide.
+### Features
+* **batch-openai:** introduce batch pipeline orchestration with resumable steps, adapter integration and end-to-end tests.
+
+### Refactors
+* **pipeline:** remove in-stream 'done' event; centralize completion emission in helper bridge; clarify advisory resume token semantics.
+* **services:** unify fetch layer (`ufetch`) with optional raw response + conditional JSON parsing; streamline OpenAI/Ollama service request/response handling; async file ops & logging consolidation.
+
+### Tests
+* **runtime:** add environment detection coverage.
+* **batch:** add adapter, step, async iteration, and e2e JSONL processing tests.
+
+### Internal / Chore
+* Curated public exports (hid internal env/prompts utilities; added batch pipeline helpers and type-only exports).
+* Ignore transient batch JSONL artifacts.
+
+---
 
 ### [1.7.1](https://github.com/pipewrk/llm-core/compare/v1.7.0...v1.7.1) (2025-09-14)
 

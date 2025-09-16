@@ -31,7 +31,6 @@ Composable LLM pipelines and semantic chunking tools, written in TypeScript, rea
 
   - [`pipeline`](#pipeline)
   - [`OllamaService` and `OpenAIService`](#ollamaservice-and-openaiservice)
-  - [OpenAI Batch Pipeline](#openai-batch-pipeline)
   - [`CosineDropChunker`](#cosinedropchunker)
 
 - [Development](#development)
@@ -234,9 +233,7 @@ Functional, pipeline-aware services for OpenAI and Ollama with typed JSON respon
 ```ts
 import { createOllamaContext, createOllamaService } from "@jasonnathan/llm-core";
 
-// Build a context once (reads OLLAMA_* env vars for unspecified fields)
 const ctx = createOllamaContext({ ollama: { model: "llama3:8b-instruct-q8_0" } });
-// Create a bound service instance
 const ollama = createOllamaService(ctx);
 
 async function getGreeting() {
@@ -256,11 +253,10 @@ For detailed usage and embeddings, see **[Ollama Service Guide](./OLLAMA_SERVICE
 Split text or markdown by semantic similarity using a functional, context-driven chunker.
 
 ```ts
-import { cosineDropChunker, createOllamaContext, createOllamaService, embedTexts } from "@jasonnathan/llm-core";
+import { cosineDropChunker, createOllamaContext, embedTexts } from "@jasonnathan/llm-core";
 
-const baseCtx = createOllamaContext({ ollama: { model: "all-minilm:l6-v2" } });
-// For embeddings you can either call embedTexts(baseCtx, texts) directly or wrap:
-const embed = (texts: string[]) => embedTexts(baseCtx, texts);
+const svc = createOllamaContext({ ollama: { model: "all-minilm:l6-v2" } });
+const embed = (texts: string[]) => embedTexts(svc, texts);
 const ctx = { embed, logger: console, pipeline: { retries: 0, timeout: 0 } };
 
 async function chunkMyMarkdown() {
@@ -271,51 +267,6 @@ async function chunkMyMarkdown() {
 ```
 
 For a deep dive into semantic chunking and all configuration options, see the **[Semantic Chunker Developer Guide](./CHUNKER.md)**.
-
-### OpenAI Batch Pipeline
-
-First‑class helpers for orchestrating a single OpenAI Batch job end‑to‑end using a resumable pipeline. Supports incremental input JSONL construction, non‑blocking status polling, output file download, and incremental output JSONL processing.
-
-Key exports:
-
-```ts
-import {
-  fromArray, fromAsync, createJob, runBatch, tickBatch,
-  type BatchEnv, type BatchJob, type BatchState, type ResumeToken
-} from "@jasonnathan/llm-core/batch-openai-pipeline";
-```
-
-Blocking (CLI/test) usage:
-
-```ts
-const final = await runBatch({
-  client: openai,               // official OpenAI client instance
-  endpoint: "/v1/chat/completions",
-  id: "daily-2025-09-16",
-  outDir: "./.runs",
-  rows: myRows,
-});
-console.log(final.processedCount, "rows processed");
-```
-
-Non‑blocking (cron/serverless) usage:
-
-```ts
-const ctx = fromAsync({ client: openai, src: myAsyncGenerator });
-let doc  = createJob({ id: "nightly-embeddings", outDir: "./.runs", endpoint: "/v1/embeddings" });
-let resume: ResumeToken<BatchJob> | undefined;
-
-while (true) {
-  const step = await tickBatch({ ctx, doc, resume });
-  if (step.done) { console.log("complete", step.value); break; }
-  doc = step.doc; resume = step.resume; // persist between invocations
-  if (step.type === "pause" && step.info?.payload?.suggestedDelayMs) {
-    await new Promise(r => setTimeout(r, step.info.payload.suggestedDelayMs));
-  }
-}
-```
-
-All batch types are exported; internal environment utilities are now internalised and not part of the public surface.
 
 ## Development
 
