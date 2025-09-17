@@ -3,7 +3,7 @@ import { pipeline, type PipelineStep } from "./pipeline";
 import type { ILogger } from "../types/dataset";
 import { getEnv } from "./env";
 import { uFetch } from "./ufetch.ts";
-import { withErrorHandling, withRetry, withTimeout, tap } from "./helpers";
+import { tap } from "./helpers";
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Context & I/O types                                                        */
@@ -20,7 +20,10 @@ export interface OllamaContext {
   };
 }
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 export type GenOptions = {
   // Ollama ignores schema_name; we pass schema as `format`
@@ -32,7 +35,6 @@ export type GenOptions = {
 export type RequestDoc<T> = {
   messages: ChatMessage[];
   options?: GenOptions;
-  customCheck?: (response: T) => T | boolean;
 };
 
 export type RawResponse = {
@@ -47,21 +49,26 @@ export type Step<I, O> = PipelineStep<I, O, OllamaContext>;
 export type Req = RequestInit & { endpoint: string };
 
 const stepBuildPayload: Step<RequestDoc<any>, Req> = (ctx) => (doc) => {
-  const endpoint = (ctx.endpoint ?? getEnv("OLLAMA_ENDPOINT")).replace(/\/$/, "");
-  const model = ctx.model;
-  const apiKey = ctx.apiKey ?? getEnv("OLLAMA_API_KEY", "");
+  const {
+    endpoint = getEnv("OLLAMA_ENDPOINT"),
+    apiKey = getEnv("OLLAMA_API_KEY", ""),
+    model = getEnv("OLLAMA_MODEL"),
+  } = ctx;
+  const { options = {} } = doc;
 
   const body: Record<string, unknown> = {
     model,
     messages: doc.messages,
     stream: false,
     // Ollama expects structured output schema under `format`
-    ...(doc.options?.schema ? { format: doc.options.schema } : {}),
+    ...(options.schema ? { format: options.schema } : {}),
     // any other passthrough options (temperature, top_p, etc.)
     ...Object.fromEntries(
-      Object.entries(doc.options ?? {}).filter(([k]) => k !== "schema")
+      Object.entries(options).filter(([k]) => k !== "schema")
     ),
   };
+
+  // ctx.logger?.info?.(`Ollama payload`, body);
 
   const headers: HeadersInit = { "Content-Type": "application/json" };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -74,30 +81,22 @@ const stepBuildPayload: Step<RequestDoc<any>, Req> = (ctx) => (doc) => {
   };
 };
 
-const stepCallAPI: Step<Req, RawResponse> = (ctx) => async (req) => {
+const stepCallAPI: Step<Req, string> = (ctx) => async (req) => {
   const { endpoint, ...init } = req;
   let text = "";
   try {
-    const res = (await uFetch(endpoint, { ...(init as RequestInit), returnRaw: true })) as Response;
-    text = await res.text();
-    if (!res.ok) {
-      ctx.logger?.error?.(`Ollama HTTP ${res.status}: ${text.slice(0, 200)}`);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    try {
-      const json = JSON.parse(text) as RawResponse;
-      return json;
-    } catch (e) {
-      ctx.logger?.error?.(`Ollama JSON parse failed: ${(e as Error).message}. Raw: ${text.slice(0, 120)}`);
-      throw e;
-    }
+    const res = await fetch(endpoint, {...init}) as Response;
+    const text = await res.text();
+    console.log({text})
+    return text as string;
   } catch (e) {
     throw e; // handled by withErrorHandling upstream
   }
 };
 
-const stepExtractContent: Step<RawResponse, string> = () => (raw) => {
-  const content = raw?.message?.content;
+const stepExtractContent: Step<string, string> = ({logger}) => (raw) => {
+  const {content} = JSON.parse(raw).message ?? {};
+  logger?.info?.(`Ollama: extracted`, content);
   if (!content) throw new Error("Ollama: no content in response");
 
   let s = content.trim();
@@ -111,10 +110,17 @@ const stepExtractContent: Step<RawResponse, string> = () => (raw) => {
   return s;
 };
 
-const stepParseJSON = <T>(): Step<string, T> => () => (jsonStr) => JSON.parse(jsonStr) as T;
-
-/** Wrapper step that applies retry + timeout around the API call. */
-const stepCallWithPolicies: Step<Req, RawResponse> = (ctx) => (payload) => withRetry(withTimeout(stepCallAPI))(ctx)(payload);
+const stepParseJSON =
+  <T>(): Step<string, T> =>
+  ({logger}) =>
+  (jsonStr) => {
+    try {
+      return JSON.parse(jsonStr) as T;
+    } catch (e) {
+      logger?.error?.(`Ollama JSON parse failed: ${(e as Error).message}. Raw: ${jsonStr}`);
+      throw e;
+    }
+  }
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Service functions                                                           */
@@ -125,29 +131,54 @@ export async function generatePromptAndSend<T>(
   systemPrompt: string,
   userPrompt: string,
   options: GenOptions = {},
-  customCheck?: (r: T) => T | boolean
+  customCheck?: (r: T) => T | boolean,
+  numTries: number = 0
 ): Promise<T> {
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
   ];
 
-  const p = pipeline<OllamaContext, RequestDoc<T>>(ctx)
-  .addStep(tap<RequestDoc<T>, OllamaContext>((c) => c.logger?.info?.(`Ollama: request start (model=${c.model})`)))
-    .addStep(withErrorHandling(stepBuildPayload))
-    .addStep(stepCallWithPolicies)
-    .addStep(withErrorHandling(stepExtractContent))
-    .addStep(stepParseJSON<T>())
-    .addStep(tap<T, OllamaContext>((c) => c.logger?.info?.("Ollama: parsed OK")));
+  const runOnce = async (): Promise<T> => {
+    const p = pipeline<OllamaContext, RequestDoc<T>>(ctx)
+      .addStep(
+        tap<RequestDoc<T>, OllamaContext>((c) =>
+          c.logger?.info?.(`Ollama: request start (model=${c.model})`)
+        )
+      )
+      .addStep(stepBuildPayload)
+      .addStep(stepCallAPI)
+      .addStep(stepExtractContent)
+      .addStep(stepParseJSON<T>())
+      .addStep(
+        tap<T, OllamaContext>((c) => c.logger?.info?.("Ollama: parsed OK"))
+      );
 
-  const parsed = await p.run({ messages, options, customCheck });
+    return p.run({ messages, options });
+  };
 
-  if (customCheck) {
-    const checked = customCheck(parsed);
-    if (!checked) throw new Error("Response failed custom check");
-    return checked as T;
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= numTries; attempt++) {
+    try {
+      const parsed = await runOnce();
+      if (customCheck) {
+        const checked = customCheck(parsed);
+        if (checked && checked !== true) return checked as T;
+        if (checked === true) return parsed;
+        ctx.logger?.warn?.(
+          `Custom check failed (attempt ${attempt + 1}/${numTries + 1})`
+        );
+        lastError = new Error("Response failed custom check");
+        continue;
+      }
+      return parsed;
+    } catch (e) {
+      // Transport/parse errors are not retried here; surface immediately
+      lastError = e as Error;
+      break;
+    }
   }
-  return parsed;
+  throw lastError ?? new Error("Response failed custom check");
 }
 
 /** Batch embeddings with built-in retry/timeout, keeping behaviour from your class version. */
@@ -155,7 +186,10 @@ export async function embedTexts(
   ctx: OllamaContext,
   inputs: string[]
 ): Promise<number[][]> {
-  const endpoint = (ctx.endpoint ?? getEnv("OLLAMA_ENDPOINT")).replace(/\/$/, "");
+  const endpoint = (ctx.endpoint ?? getEnv("OLLAMA_ENDPOINT")).replace(
+    /\/$/,
+    ""
+  );
   const url = `${endpoint}/api/embeddings`;
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -170,10 +204,17 @@ export async function embedTexts(
     let attempt = 0;
     for (; attempt < max; attempt++) {
       try {
-        ctx.logger?.info?.(`Ollama embed "${input.slice(0, 48)}..." (attempt ${attempt + 1}/${max})`);
-  const controller = new AbortController();
-  const timeoutMs = ctx.pipeline?.timeout ?? 12000;
-        const to = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+        ctx.logger?.info?.(
+          `Ollama embed "${input.slice(0, 48)}..." (attempt ${
+            attempt + 1
+          }/${max})`
+        );
+        const controller = new AbortController();
+        const timeoutMs = ctx.pipeline?.timeout ?? 12000;
+        const to =
+          timeoutMs > 0
+            ? setTimeout(() => controller.abort(), timeoutMs)
+            : null;
         const res = await fetch(url, {
           method: "POST",
           headers,
@@ -182,16 +223,23 @@ export async function embedTexts(
         }).finally(() => to && clearTimeout(to!));
         const text = await res.text();
         if (!res.ok) {
-          ctx.logger?.error?.(`Ollama HTTP ${res.status}: ${text.slice(0, 160)}`);
+          ctx.logger?.error?.(
+            `Ollama HTTP ${res.status}: ${text.slice(0, 160)}`
+          );
           throw new Error(`HTTP ${res.status}`);
         }
         try {
           const parsed = JSON.parse(text) as { embedding?: number[] };
-          if (!Array.isArray(parsed.embedding)) throw new Error("missing embedding");
+          if (!Array.isArray(parsed.embedding))
+            throw new Error("missing embedding");
           out.push(parsed.embedding);
           break; // success
         } catch (e) {
-          ctx.logger?.error?.(`Ollama embed JSON parse failed: ${(e as Error).message}. Raw: ${text.slice(0,120)}`);
+          ctx.logger?.error?.(
+            `Ollama embed JSON parse failed: ${
+              (e as Error).message
+            }. Raw: ${text.slice(0, 120)}`
+          );
           throw e;
         }
       } catch (e) {
@@ -201,7 +249,9 @@ export async function embedTexts(
       }
     }
     if (attempt === max) {
-      throw new Error(`Embedding failed for "${input.slice(0, 48)}..."  ${lastErr?.message}`);
+      throw new Error(
+        `Embedding failed for "${input.slice(0, 48)}..."  ${lastErr?.message}`
+      );
     }
   }
 
@@ -209,7 +259,9 @@ export async function embedTexts(
 }
 
 /* Convenience to build ctx from env */
-export function createOllamaContext(overrides?: Partial<OllamaContext>): OllamaContext {
+export function createOllamaContext(
+  overrides?: Partial<OllamaContext>
+): OllamaContext {
   return {
     logger: overrides?.logger,
     model: overrides?.model ?? getEnv("OLLAMA_MODEL"),
@@ -232,7 +284,8 @@ export interface OllamaService {
     systemPrompt: string,
     userPrompt: string,
     options?: GenOptions,
-    customCheck?: (r: T) => T | boolean
+    customCheck?: (r: T) => T | boolean,
+    numTries?: number
   ): Promise<T>;
 }
 
@@ -246,8 +299,17 @@ export function createOllamaService(ctx: OllamaContext): OllamaService {
       systemPrompt: string,
       userPrompt: string,
       options: GenOptions = {},
-      customCheck?: (r: T) => T | boolean
-    ) => generatePromptAndSend<T>(ctx, systemPrompt, userPrompt, options, customCheck),
+      customCheck?: (r: T) => T | boolean,
+      numTries: number = 0
+    ) =>
+      generatePromptAndSend<T>(
+        ctx,
+        systemPrompt,
+        userPrompt,
+        options,
+        customCheck,
+        numTries
+      ),
   };
 }
 
@@ -257,5 +319,5 @@ export const __test = {
   stepCallAPI,
   stepExtractContent,
   stepParseJSON,
-  stepCallWithPolicies,
+  // stepCallWithPolicies,
 };

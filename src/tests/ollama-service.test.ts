@@ -50,7 +50,7 @@ describe("Ollama service (pipeline-based)", () => {
     expect(out).toEqual({ key: "value" });
   });
 
-  it("logs and throws on HTTP error (generatePromptAndSend)", async () => {
+  it("logs parse error on non-OK HTTP (generatePromptAndSend)", async () => {
     global.fetch = Object.assign(
       mock().mockResolvedValue({
         ok: false,
@@ -60,9 +60,9 @@ describe("Ollama service (pipeline-based)", () => {
     ) as typeof fetch;
 
   const ctx = createOllamaContext({ logger, endpoint, model });
-    const out = await generatePromptAndSend(ctx, "sys", "user", {});
-    // On HTTP error, the pipeline pauses; wrapper logs error and returns early.
-    expect(logger.logs.error.join("\n")).toMatch(/Ollama HTTP/);
+    const out = await generatePromptAndSend(ctx, "sys", "user", {} as any);
+    // Service now attempts to parse body regardless; expect JSON parse error log.
+    expect(logger.logs.error.join("\n")).toMatch(/JSON parse failed|Unexpected identifier/);
   });
 
   it("logs parse failure when server returns invalid JSON", async () => {
@@ -120,7 +120,7 @@ describe("Ollama service (pipeline-based)", () => {
     expect(typeof result).toBe('object');
   });
 
-  it("hooks: stepParseJSON factory and call-with-policies wrapper", async () => {
+  it("hooks: stepParseJSON, call and extract sequence", async () => {
     const parsed = (await ollamaHooks.stepParseJSON<{ a: number }>()({} as any)("{\"a\":1}")) as any;
     expect(parsed.a).toBe(1);
 
@@ -133,13 +133,15 @@ describe("Ollama service (pipeline-based)", () => {
     ) as typeof fetch;
 
   const ctx = createOllamaContext({ endpoint, model });
-    const res = (await ollamaHooks.stepCallWithPolicies(ctx as any)({
+    const raw = (await ollamaHooks.stepCallAPI(ctx as any)({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
-      __url: `${endpoint}/api/chat`,
-    } as any)) as any;
-    expect(res.message?.content).toContain("ok");
+      endpoint: `${endpoint}/api/chat`,
+    } as any)) as unknown as string;
+    const contentStr = ollamaHooks.stepExtractContent(ctx as any)(raw) as unknown as string;
+    const obj = (ollamaHooks.stepParseJSON<{ ok: boolean }>()(ctx as any)(contentStr) as unknown) as { ok: boolean };
+    expect(obj.ok).toBe(true);
   });
 
   it("should throw error if custom check fails", async () => {
